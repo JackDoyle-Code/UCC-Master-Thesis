@@ -1,0 +1,567 @@
+---
+title: "Caret_ML"
+author: "Shriram Patel"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+
+
+####### ML workflow (inspired and learned from mikropml R package)
+```{r}
+#################
+# Load libraries and custom scripts
+library(data.table)
+library(endoR)
+library(pROC)
+library(viridis)
+library(RColorBrewer)
+library(ggpubr)
+library(purrr)
+library(caret)
+library(tidyverse)
+source("/home/shriram/Desktop/Rprojects/custom_scripts/Filter_table.R")
+
+
+# ####### Load data set from IBD for testing and developing workflow
+# # Function to get count data for each taxonomic level
+# get_abundance <- function(input, level=NULL, abundance_type) {
+# 
+#   # error if abundance type does not match
+#   stopifnot(abundance_type %in% c("count", "rel", "clr"))
+# 
+#   if (is.null(level)) {
+# 
+#     results <- list()
+#     for (aa in names(input)) {
+#       cat("Subsetting", abundance_type, "for", aa, "\n")
+# 
+#       master <- input[["L8"]][[abundance_type]]
+#       test <- input[[aa]][[abundance_type]]
+# 
+#       # subset by matching to master
+#       test <- subset.data.frame(x = test, select = colnames(master))
+# 
+#       # check if sample names matches
+#       stopifnot(all(colnames(master) == colnames(test)))
+# 
+#       # combine all
+#       results[[aa]] <- test %>% mutate(taxonomic_rank=aa) %>%
+#         rownames_to_column("taxa") %>% select(taxa, taxonomic_rank, everything())
+#     }
+#     # combine all
+#     final <- bind_rows(results)
+#     return(final)
+# 
+#   } else {
+#     # get specific level only
+#     aa <- level
+#     cat("Subsetting", abundance_type, "for", aa, "\n")
+# 
+#     master <- input[["L8"]][[abundance_type]]
+#     test <- input[[aa]][[abundance_type]]
+# 
+#     # subset by matching to master
+#     test <- subset.data.frame(x = test, select = colnames(master))
+# 
+#     # check if sample names matches
+#     stopifnot(all(colnames(master) == colnames(test)))
+# 
+#     # combine all
+#     results <- test %>% mutate(taxonomic_rank=aa) %>%
+#       rownames_to_column("taxa") %>% select(taxa, taxonomic_rank, everything())
+#     return(results)
+#   }
+# }
+# 
+# # load count data
+# df <- readRDS("/home/shriram/Desktop/Rprojects/APC_Projects/Stool_Biopsy/UPDATED_May18/Final_data/L2-L8_count_table_0.1%.RDS")
+# df <- get_abundance(input = df, level = "L6", abundance_type = "clr")
+# 
+# ## Finalize data-frame
+# df <- df %>%
+#   select(-taxonomic_rank) %>%
+#   column_to_rownames("taxa") %>%
+#   t %>% as.data.frame()
+# 
+# # Load Metadata
+# Metadata <- readxl::read_xlsx(path =  "/home/shriram/Desktop/Rprojects/APC_Projects/Stool_Biopsy/UPDATED_May18/Master_data/Metadata_SecondGenome.xlsx", sheet = "Final")
+# 
+# # Mutate Metadata
+# Metadata <- Metadata %>%
+#   filter(SampleID %in% row.names(df)) %>%
+#   filter(INCLUDE == TRUE) %>%
+#   filter(Specimen == "Biopsy", Nuc_source == "cDNA", Disease_type %in% c("Healthy", "CD"))
+# 
+# # Subset count tables accordingly
+# df <- df %>% filter(row.names(.) %in% Metadata$SampleID)
+
+
+
+####### Load data set from AF131 for testing and developing workflow
+TIMEPOINT=c("Week 12")
+PRODUCT=c("Placebo", "B2_10mg")
+
+# Load Metadata file and some mutate
+Metadata <- readxl::read_xlsx(path = "/home/shriram/Desktop/Rprojects/AF131/Raw_data/Metadata_filt.xlsx", sheet = "Final")
+Metadata <- Metadata %>%
+  dplyr::select(SampleID, Product, Timepoint, SubjectID, Population) %>%
+  dplyr::mutate("Product" = recode(Product, "Vitamin B2: 1.4mg"="B2_1.4mg", "Vitamin B2: 10mg"="B2_10mg", "Vitamin B2: 75mg"="B2_75mg")) %>%
+  dplyr::filter(Timepoint %in% TIMEPOINT) %>%
+  dplyr::filter(Product %in% PRODUCT)
+
+# Import count tables
+k2 <- readRDS(file = "/home/shriram/Desktop/Rprojects/AF131/Raw_data/Taxa_table_filt.RDS")
+
+#### remove Eukaryota#
+k2 <- k2 %>%
+  .[["L7"]] %>%
+  dplyr::filter(!taxa %in% c("Eukaryota", "Chordata", "Mammalia", "Primates",	"Hominidae",	"Homo",	"Homo_sapiens")) %>%
+  tibble::column_to_rownames("taxa") %>% dplyr::select(-taxonomy) %>%
+  dplyr::mutate_if(is.character, as.numeric) %>%
+  dplyr::select(Metadata$SampleID)
+
+# Filter down low abundant species and normalized data
+df <- as.data.frame(apply(k2, 2, function(x) {x/sum(x)}))
+
+
+
+
+
+######### CHANGE ME #########
+dataset = df # sample (rows) - features (columns)
+metadata = Metadata # make sure that sample order matches
+outcome_colname = "Disease_type"
+group_colname = "PatientID" # name of subject column or NULL
+method = "xgbTree" #c("glmnet", "rf", "rpart2", "svmRadial", "xgbTree", "customrf")
+filter_feature = TRUE
+
+### some more param ###
+hyperparameters = list(mtry = c(7, 14, 28, 32, 64), ntree = c(50, 100, 200, 500, 1000))
+resamp_method = "cv" # can be c("cv", "LOOCV", "repeatedcv")
+outer_folds = NULL
+kfold = 5
+outer_folds = NULL
+n_outer_folds = 5
+n_inner_folds = 5
+cv_times = 20
+training_frac = 0.80
+cross_val = NULL
+perf_metric_function = NULL
+perf_metric_name = "Accuracy"
+group_partitions = NULL
+class_weight = FALSE
+find_feature_importance = TRUE
+jobs = 2
+threads = 4 
+seed = 12345
+######### CHANGE ME #########
+
+jsn <- run_ml_cv(dataset = df, metadata = Metadata, method = method, outcome_colname = outcome_colname, group_colname = group_colname,
+                 outer_folds = outer_folds, filter_feature = filter_feature, hyperparameters = hyperparameters,
+                 kfold = kfold, cv_times = cv_times, resamp_method = resamp_method,
+                 find_feature_importance = find_feature_importance, jobs = jobs, threads = threads, seed = seed)
+
+jsn <- run_ml_nestedcv(dataset = df, metadata = Metadata, method = method, outcome_colname = outcome_colname, group_colname = group_colname,
+                       outer_folds = outer_folds, filter_feature = filter_feature, hyperparameters = hyperparameters,
+                       n_outer_folds = n_outer_folds, n_inner_folds = n_inner_folds, cv_times = cv_times, resamp_method = resamp_method,
+                       find_feature_importance = find_feature_importance, jobs = jobs, threads = threads, seed = seed)
+
+
+    ####### Source some functions from files #######
+    in_path = "/home/shriram/Desktop/Rprojects/SeqBiomeML/R/"
+    file_path <- list.files(in_path, full.names = TRUE)
+    for(f_path in file_path) { source(f_path) }
+
+    
+    set.seed(seed)
+    # cross-validation
+    results=run_ml_cv(dataset = dataset, 
+                      metadata = metadata, 
+                      method = method, 
+                      outcome_colname = outcome_colname, 
+                      group_colname = group_colname, 
+                            
+                      resamp_method = resamp_method,
+                      outer_folds = outer_folds,
+                      filter_feature = filter_feature, 
+                      kfold = kfold, 
+                      cv_times = cv_times, 
+                      training_frac = training_frac, 
+                      hyperparameters = hyperparameters, 
+                      cross_val = cross_val, 
+                      perf_metric_function = perf_metric_function, 
+                      perf_metric_name = perf_metric_name, 
+                      group_partitions = group_partitions, 
+                      class_weight = class_weight,
+                            
+                      find_feature_importance = find_feature_importance,
+                            
+                      jobs = jobs, 
+                      threads = threads, 
+                      seed = seed)
+    
+    
+    set.seed(seed)
+    # nested cross-validation
+    results=run_ml_nestedcv(dataset = dataset, 
+                            metadata = metadata, 
+                            method = method, 
+                            outcome_colname = outcome_colname, 
+                            group_colname = group_colname, 
+                            
+                            resamp_method = resamp_method,
+                            outer_folds = outer_folds,
+                            filter_feature = filter_feature, 
+                            n_outer_folds = n_outer_folds, 
+                            n_inner_folds = n_inner_folds, 
+                            cv_times = cv_times, 
+                            training_frac = training_frac, 
+                            hyperparameters = hyperparameters, 
+                            cross_val = cross_val, 
+                            perf_metric_function = perf_metric_function, 
+                            perf_metric_name = perf_metric_name, 
+                            group_partitions = group_partitions, 
+                            class_weight = class_weight,
+                            
+                            find_feature_importance = find_feature_importance,
+                            
+                            jobs = jobs, 
+                            threads = threads, 
+                            seed = seed)
+
+    message("Performing various checks on datasets, metadata and supplied params")
+    # Various checks
+    ### @checks.R -> Function-1 and Function-12
+    check_all(
+          dataset,
+          metadata,
+          outcome_colname,
+          method,
+          n_outer_folds,
+          perf_metric_function,
+          perf_metric_name,
+          group_colname,
+          group_partitions,
+          seed,
+          hyperparameters
+        )
+    
+    # set seed if provided #
+    if (!is.na(seed)) {
+      set.seed(seed)
+    }
+
+
+    # Check for any space in the outcome_colname of Metadata
+    ### @utils.R -> Function-3
+    metadata[[outcome_colname]] <- replace_spaces(metadata[[outcome_colname]])
+    if (!is.null(group_colname)) {
+      metadata[[group_colname]] <- replace_spaces(metadata[[group_colname]])
+    }
+
+
+    # shuffle and randomized outcome_colname
+    ### @utils.R -> Function-1
+    dataset <- randomize_feature_order(dataset) %>% as.data.frame()
+
+
+    # pull outcomes vector and groups vector
+    outcomes_vctr <- metadata %>% dplyr::pull(outcome_colname)
+    if (is.null(group_colname)) {
+      groups <- NULL
+    } else {
+      groups <- metadata %>% dplyr::pull(group_colname)
+    }
+
+
+    # Get indices to split dataset into train
+    ### @define_folds.R -> Function-1 to Function-3
+    if (is.null(outer_folds)) {
+      message("Creating outer data folds.")
+      outer_folds <- define_outer_folds(
+        metadata = metadata,
+        outcome_colname = outcome_colname,
+        outer_fold = n_outer_folds,
+        groups = groups,
+        seed = seed)
+      } else {
+        message("Validating provided outer data folds")
+        # check names of provided outer folds
+        if (!all(names(outer_fold) %in% paste0("Fold", seq(1, n_outer_folds, 1)))) {
+          stop("provide names of outer_folds with Fold{N}")
+        }
+        # check consistency between groups and outer folds provided
+        if (!is.null(groups)) {
+          if (any(validate_outer_folds_with_groups(groups, outer_folds))) {
+            stop("groups and provided outer_folds are not consistent")
+          }
+        }
+        message("Number of samples in training dataset in outer-loop range from ", paste0(round(range(sapply(outer_folds, length)/nrow(metadata)), 2), collapse = '-'))
+        if (n_outer_folds != length(outer_folds)) message("Setting n_outer_folds")
+        n_outer_folds <- length(outer_folds)
+      }
+
+      # Run Inner folds now
+      ### @nestedcvCore.R -> Function-1 to Function-2
+      ### @cross_val_unnested.R -> Function-1 to Function-3
+      outer_res <- parallel::mclapply(seq_along(outer_folds), function(out_fold) {
+        nestedcvCore(
+          dataset = dataset,
+          metdata = metdata,
+          groups = groups,
+          method = method,
+          filter_feature = filter_feature,
+
+          out_fold = out_fold,
+          outer_folds = outer_folds,
+
+          outcomes_vctr = outcomes_vctr,
+          outcome_colname = outcome_colname,
+
+          hyperparameters = hyperparameters,
+          resamp_method = resamp_method,
+          perf_metric_name = perf_metric_name,
+          n_inner_folds = n_inner_folds,
+          cv_times = cv_times,
+
+          threads = threads,
+          seed = seed
+        )
+      }, mc.cores = jobs, mc.allow.recursive = FALSE)
+
+
+      message("Fitting final model using best tuned parameters")
+      # Finalise bestTune params and Fit final model
+      ### @performance.R -> Function-6
+      bestTunes <- lapply(outer_res, function(i) i$trained_model$bestTune) %>%
+      bind_rows() %>%
+      mutate("Fold" = paste0("Fold", row.names(.))) %>%
+      column_to_rownames("Fold")
+      finalTune <- finaliseTune(bestTunes)
+
+      
+      # Get type of predicting variable
+      ### @performance.R -> Function-1
+      outcome_type <- get_outcome_type(outcomes_vctr)
+      class_probs <- outcome_type != "continuous"
+
+      # Fit final single model
+      fitControl <- caret::trainControl(
+        method = "none", number = NA, repeats = NA,
+        index = NULL, classProbs = class_probs,
+        savePredictions = TRUE, seeds = seed
+      )
+
+      final_fit <- caret::train(
+        x = dataset,
+        y = (metadata %>% pull(outcome_colname)),
+        method = if (!grepl("custom", method)) method else get(paste0(method, "_param")),
+        trControl = fitControl,
+        tuneGrid = finalTune
+      )
+      
+      
+      
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+####### nested_cv ML analysis #######
+```{r}
+#################
+# Load libraries and custom scripts
+library(data.table)
+library(endoR)
+library(pROC)
+library(viridis)
+library(RColorBrewer)
+library(ggpubr)
+library(purrr)
+library(caret)
+library(tidyverse)
+source("/home/seqbiome/Desktop/Rprojects/custom_scripts/Filter_table.R")
+
+
+######### DATA ######### 
+y <- iris$Species
+x <- iris[, -5]
+outer_folds <- createFolds(y, k = 5)
+inner_folds <- lapply(outer_folds, function(i) {
+    ytrain <- y[-i]
+    createFolds(ytrain, k = 5)
+})
+######### DATA ######### 
+
+######### CHANGE ME #########
+method = "rf"
+filterFUN = NULL
+filter_options = NULL
+weights = NULL
+balance = NULL
+balance_options = NULL
+modifyX = NULL
+modifyX_useY = FALSE
+modifyX_options = NULL
+outer_method = c("cv")
+n_outer_folds = 5
+n_inner_folds = 5
+outer_folds = outer_folds
+inner_folds = inner_folds
+pass_outer_folds = FALSE
+cv.cores = 1
+multicore_fork = (Sys.info()["sysname"] != "Windows")
+metric = ifelse(is.factor(y), "logLoss", "RMSE")
+trControl = NULL
+tuneGrid = NULL
+savePredictions = "final"
+outer_train_predict = FALSE
+finalCV = TRUE
+na.option = "pass"
+verbose = TRUE
+######### CHANGE ME ######### 
+seed = 123
+set.seed(seed)
+
+
+
+### MISC FUN ###
+swapFoldIndex <- function(folds, len = max(unlist(folds))) {
+  lapply(folds, function(i) setdiff(seq_len(len), i))
+}
+################
+
+
+
+### Define outer fold if null
+if (is.null(outer_folds)) {
+  outer_folds <- switch(outer_method,
+                        cv = createFolds(y, k = n_outer_folds),
+                        LOOCV = 1:length(y))
+} else {
+  outer_folds = outer_folds
+  n_outer_folds <- length(outer_folds)
+}
+
+
+
+### Define inner fold if null
+if (!is.null(inner_folds)) {
+  if (length(inner_folds) != length(outer_folds)) stop("Mismatch in length(outer_folds) and length(inner_folds)")
+  n_inner_folds <- length(inner_folds[[1]])
+  
+  outer_train_size <- sapply(swapFoldIndex(outer_folds), length)
+  chk <- vapply(seq_along(outer_train_size), function(i) {
+    max(unlist(inner_folds[[i]])) > outer_train_size[i]
+  }, logical(1))
+  if (any(chk)) stop("inner_folds contains index out of range")
+  inner_train_folds <- lapply(inner_folds, swapFoldIndex)
+} else {
+  inner_train_folds <- NULL
+}
+
+
+
+### Define train control ###
+if (is.null(trControl)) {
+  trControl <- if (is.factor(y)) {
+    trainControl(method = "cv",
+                 number = n_inner_folds,
+                 classProbs = TRUE,
+                 savePredictions = savePredictions,
+                 summaryFunction = mnLogLoss)
+  } else trainControl(method = "cv",
+                      number = n_inner_folds,
+                      savePredictions = savePredictions)
+}
+
+
+# switch off inner CV if tuneGrid is single row
+if (!is.null(tuneGrid)) {
+  if (nrow(tuneGrid) == 1) {
+    trControl <- trainControl(method = "none", classProbs = TRUE)
+    inner_train_folds <- NULL
+  }
+}
+
+
+# Fit final model
+if (is.na(finalCV)) {
+  final_fit <- finalTune <- filtx <- yfinal <- xsub <- NA
+} else {
+  # fit final model with CV on whole dataset first
+  if (verbose) message("Fitting final model using CV on whole data")
+  dat <- nest_filt_bal(NULL, y, x, filterFUN, filter_options,
+                       balance, balance_options,
+                       modifyX, modifyX_useY, modifyX_options)
+  yfinal <- dat$ytrain
+  filtx <- dat$filt_xtrain
+  if (finalCV) {
+    # use CV on whole data to finalise parameters
+    trControlFinal <- trControl
+    if (pass_outer_folds) {
+      if (n_outer_folds == trControl$number && trControl$method == "cv" &&
+          is.null(balance)) {
+        train_folds <- swapFoldIndex(outer_folds, length(y))
+        trControlFinal$index <- train_folds
+        trControlFinal$indexOut <- outer_folds
+      } else message("Cannot pass `outer_folds` to final CV")
+    }
+    
+    if (cv.cores >= 2) {
+      if (Sys.info()["sysname"] == "Windows") {
+        cl <- makeCluster(cv.cores)
+        registerDoParallel(cl)
+      } else {
+        # unix
+        registerDoParallel(cores = cv.cores)
+      }
+    }
+    printlog <- capture.output({
+      final_fit <- caret::train(x = filtx, y = yfinal,
+                                method = method,
+                                weights = weights,
+                                metric = metric,
+                                trControl = trControlFinal,
+                                tuneGrid = tuneGrid, ...)
+    })
+    finalTune <- final_fit$bestTune
+    if (cv.cores >= 2) {
+      if (Sys.info()["sysname"] == "Windows") stopCluster(cl)
+      foreach::registerDoSEQ()
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```
+

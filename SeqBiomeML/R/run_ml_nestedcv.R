@@ -185,11 +185,12 @@ run_ml_nestedcv <-
     # At this stage implement feature preprocessing
     ### @preprocess_features.R -> Function-1 to function-9
     message("Performing preprocessing of dataset.")
-    filt_dataset <- preprocess_features(train_data = dataset,
-                                        train_metadata = metadata,
-                                        outcome_colname = outcome_colname,
-                                        preprocess_methods = preprocess_methods,
-                                        corrFunList = corrFunList)
+    filt_dataset <- preprocess_features(
+      train_data = dataset,
+      train_metadata = metadata,
+      outcome_colname = outcome_colname,
+      preprocess_methods = preprocess_methods,
+      corrFunList = corrFunList)
     dataset = filt_dataset[[1]]
     metadata = filt_dataset[[2]]
     grouped_feat = filt_dataset[[4]]
@@ -226,10 +227,12 @@ run_ml_nestedcv <-
     # Run Inner folds now
     ### @nestedcvCore.R -> Function-1 to Function-2
     ### @cross_val_unnested.R -> Function-1 to Function-3
-    outer_res <- parallel::mclapply(seq_along(outer_folds), function(out_fold) {
+    outer_res <- parallel::mclapply(seq_along(outer_folds), function(out_fold)
+    tryCatch(
+      {
       nestedcvCore(
         dataset = dataset,
-        metdata = metdata,
+        metadata = metadata,
         groups = groups,
         method = method,
         outcomes_vctr = outcomes_vctr,
@@ -249,9 +252,9 @@ run_ml_nestedcv <-
         grouped_feat = grouped_feat,
 
         threads = threads,
-        seed = seed
-      )
-    }, mc.cores = jobs, mc.allow.recursive = FALSE)
+        seed = seed)
+      }, error = function(e) print(e)
+    ), mc.cores = jobs, mc.allow.recursive = FALSE)
     names(outer_res) <- paste0("Fold", seq(1, length(outer_res)))
 
 
@@ -259,9 +262,9 @@ run_ml_nestedcv <-
     # Finalise bestTune params and Fit final model
     ### @performance.R -> Function-6
     bestTunes <- lapply(outer_res, function(i) i$trained_model$bestTune) %>%
-    dplyr::bind_rows() %>%
-    dplyr::mutate("Fold" = paste0("Fold", row.names(.))) %>%
-    tibble::column_to_rownames("Fold")
+      dplyr::bind_rows() %>%
+      dplyr::mutate("Fold" = paste0("Fold", row.names(.))) %>%
+      tibble::column_to_rownames("Fold")
     finalTune <- finaliseTune(bestTunes)
     message("Final tuned parameters are...")
     print(finalTune, digits = 2L, print.gap = 2L, row.names = FALSE)
@@ -294,7 +297,7 @@ run_ml_nestedcv <-
       if (feature_importance_method == "endoR") {
         message("Performing feature importance analysis using endoR")
         # Feature importance analysis and plot
-        ### @feature_importance.R -> Function-1
+        ### @feature_importance_endoR.R -> Function-1
         if (method == "rf" | method == "customrf") {
           model_type = "random forest"
         } else if (method == "xgbTree") {
@@ -321,11 +324,11 @@ run_ml_nestedcv <-
       if (feature_importance_method == "permutation") {
         message("Performing feature importance analysis using permutation")
         # Feature importance analysis and plot
-        ### @feature_importance.R -> Function-1
+        ### @feature_importance_permuted.R -> Function-1 to Function-6
           feat_imp = feature_importance_permuted(
             trained_model = final_fit,
-            train_data = dataset,
-            train_metadata = metadata,
+            test_data = dataset,
+            test_metadata = metadata,
             outcome_colname = outcome_colname,
             perf_metric_function = perf_metric_function,
             perf_metric_name = perf_metric_name,

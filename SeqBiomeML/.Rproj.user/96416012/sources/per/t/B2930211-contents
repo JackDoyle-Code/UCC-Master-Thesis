@@ -1,0 +1,567 @@
+---
+title: "Caret_ML"
+author: "Shriram Patel"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+
+
+####### ML workflow (inspired and learned from mikropml R package)
+```{r}
+#################
+# Load libraries and custom scripts
+library(data.table)
+library(endoR)
+library(pROC)
+library(viridis)
+library(RColorBrewer)
+library(ggpubr)
+library(purrr)
+library(caret)
+library(tidyverse)
+source("/home/shriram/Desktop/Rprojects/custom_scripts/Filter_table.R")
+
+
+
+# 
+# ####### Load data set from IBD for testing and developing workflow
+# # Function to get count data for each taxonomic level
+# get_abundance <- function(input, level=NULL, abundance_type) {
+# 
+#   # error if abundance type does not match
+#   stopifnot(abundance_type %in% c("count", "rel", "clr"))
+# 
+#   if (is.null(level)) {
+# 
+#     results <- list()
+#     for (aa in names(input)) {
+#       cat("Subsetting", abundance_type, "for", aa, "\n")
+# 
+#       master <- input[["L8"]][[abundance_type]]
+#       test <- input[[aa]][[abundance_type]]
+# 
+#       # subset by matching to master
+#       test <- subset.data.frame(x = test, select = colnames(master))
+# 
+#       # check if sample names matches
+#       stopifnot(all(colnames(master) == colnames(test)))
+# 
+#       # combine all
+#       results[[aa]] <- test %>% mutate(taxonomic_rank=aa) %>%
+#         rownames_to_column("taxa") %>% select(taxa, taxonomic_rank, everything())
+#     }
+#     # combine all
+#     final <- bind_rows(results)
+#     return(final)
+# 
+#   } else {
+#     # get specific level only
+#     aa <- level
+#     cat("Subsetting", abundance_type, "for", aa, "\n")
+# 
+#     master <- input[["L8"]][[abundance_type]]
+#     test <- input[[aa]][[abundance_type]]
+# 
+#     # subset by matching to master
+#     test <- subset.data.frame(x = test, select = colnames(master))
+# 
+#     # check if sample names matches
+#     stopifnot(all(colnames(master) == colnames(test)))
+# 
+#     # combine all
+#     results <- test %>% mutate(taxonomic_rank=aa) %>%
+#       rownames_to_column("taxa") %>% select(taxa, taxonomic_rank, everything())
+#     return(results)
+#   }
+# }
+# 
+# # load count data
+# df <- readRDS("/home/shriram/Desktop/Rprojects/APC_Projects/Stool_Biopsy/UPDATED_May18/Final_data/L2-L8_count_table_0.1%.RDS")
+# df <- get_abundance(input = df, level = "L8", abundance_type = "clr")
+# 
+# ## Finalize data-frame
+# df <- df %>%
+#   select(-taxonomic_rank) %>%
+#   column_to_rownames("taxa") %>%
+#   t %>% as.data.frame()
+# 
+# # Load Metadata
+# Metadata <- readxl::read_xlsx(path =  "/home/shriram/Desktop/Rprojects/APC_Projects/Stool_Biopsy/UPDATED_May18/Master_data/Metadata_SecondGenome.xlsx", sheet = "Final")
+# 
+# # Mutate Metadata
+# Metadata <- Metadata %>%
+#   filter(SampleID %in% row.names(df)) %>%
+#   filter(INCLUDE == TRUE) %>%
+#   filter(Specimen == "Biopsy", Nuc_source == "cDNA", Disease_type %in% c("Healthy", "CD"))
+# 
+# # Subset count tables accordingly
+# df <- df %>% filter(row.names(.) %in% Metadata$SampleID)
+
+
+
+# ####### Load data set from AF130 for testing and developing workflow
+# # Load Metadata file and some mutate
+# Metadata <- readxl::read_xlsx(path = "/home/seqbiome/Desktop/Rprojects/AF130/Raw_data/Metadata.xlsx", sheet = "Final")
+# Metadata <- Metadata %>% select(SampleID, Product, Timepoint, SubjectID, Population) %>%
+#   filter(Timepoint %in%  c("Week 4")) %>%
+#   mutate("Product" = recode(Product, "Vitamin C: 80mg"="VitaminC80mg", "Vitamin C: 200mg"="VitaminC200mg", "Vitamin C: 500mg"="VitaminC500mg"))
+# 
+# 
+# # Import count tables
+# df <- readRDS(file = "/home/seqbiome/Desktop/Rprojects/AF130/Raw_data/Taxa_table.RDS")
+# 
+# # remove Eukaryota and mutate
+# df <- df %>%
+#   .[["L6"]] %>%
+#   filter(!taxa %in% c("Eukaryota", "Chordata", "Mammalia", "Primates",	"Hominidae",	"Homo",	"Homo_sapiens")) %>%
+#   column_to_rownames("taxa") %>% select(-taxonomy) %>%
+#   mutate_if(is.character, as.numeric) %>%
+#   select(Metadata$SampleID)
+# 
+# # Filter down low abundant species and normalized data
+# df <- as.data.frame(apply(df, 2, function(x) {x/sum(x)}))
+# df <- as.data.frame(t(filter_table(data = df, prevalance.threshold = 5, abundance.threshold = 0.01, reads.threshold = 0, counts = FALSE, debug = FALSE)))
+
+
+
+
+
+
+# ####### Load data set from ZHOU_DAN_2020 for testing and developing workflow
+# # Load Metadata
+# Metadata <- readxl::read_xlsx(path =  "/home/seqbiome/Desktop/Rprojects/ML/Processed_data/ZHOU_DAN_2020/Metadata.xlsx", sheet = "Sheet1")
+# Metadata <- Metadata %>% rename("SampleID" = `Sample ID`, "Disease_type" = Stage)
+# 
+# # Load count table
+# df <- readxl::read_xlsx(path =  "/home/seqbiome/Desktop/Rprojects/ML/Processed_data/ZHOU_DAN_2020/16S.xlsx", sheet = "Sheet1")
+# df <- df %>% select(-taxonomy) %>%
+#   column_to_rownames("OTU") %>%
+#   select(any_of(Metadata$SampleID))
+# 
+# # Filter down low abundant species and normalized data
+# df <- as.data.frame(apply(df, 2, function(x) {x/sum(x)}))
+# df <- filter_table(data = df, prevalance.threshold = 10, abundance.threshold = 0.01, reads.threshold = 0, counts = FALSE, debug = FALSE)
+# df <- df %>% t %>% as.data.frame()
+# 
+# # Now Subset Metadata
+# Metadata <- Metadata %>% filter(SampleID %in% row.names(df))
+
+
+
+
+####### Load data set from AF131 for testing and developing workflow
+TIMEPOINT=c("Week 12")
+PRODUCT=c("Placebo", "B2_1.4mg")
+
+# Load Metadata file and some mutate
+Metadata <- readxl::read_xlsx(path = "/home/shriram/Desktop/Rprojects/AF131/Raw_data/Metadata.xlsx", sheet = "Final")
+Metadata <- Metadata %>%
+  select(SampleID, Product, Timepoint, SubjectID, Population) %>%
+  mutate("Product" = recode(Product, "Vitamin B2: 1.4mg"="B2_1.4mg", "Vitamin B2: 10mg"="B2_10mg", "Vitamin B2: 75mg"="B2_75mg")) %>%
+  filter(Timepoint %in% TIMEPOINT) %>%
+  filter(Product %in% PRODUCT)
+
+# Import count tables
+k2 <- readRDS(file = "/home/shriram/Desktop/Rprojects/AF131/Raw_data/Taxa_table.RDS")
+
+#### remove Eukaryota#
+k2 <- k2 %>%
+  .[["L7"]] %>%
+  filter(!taxa %in% c("Eukaryota", "Chordata", "Mammalia", "Primates",	"Hominidae",	"Homo",	"Homo_sapiens")) %>%
+  column_to_rownames("taxa") %>% select(-taxonomy) %>%
+  mutate_if(is.character, as.numeric) %>%
+  select(Metadata$SampleID)
+
+# Filter down low abundant species and normalized data
+df <- as.data.frame(apply(k2, 2, function(x) {x/sum(x)}))
+df <- as.data.frame(t(filter_table(data = df, prevalance.threshold = 5, abundance.threshold = 0.01, reads.threshold = 0, counts = FALSE, debug = FALSE)))
+
+
+
+
+
+######### CHANGE ME #########
+dataset = df # sample (rows) - features (columns)
+metadata = Metadata # make sure that sample order matches
+outcome_colname = "Disease_type"
+group_colname = "patientID" # name of subject column or NULL
+method = "rf" #c("glmnet", "rf", "rpart2", "svmRadial", "xgbTree", "customrf")
+
+### some more param ###
+hyperparameters = NULL #list(mtry = c(14, 32), ntree = c(100, 200)) #list(mtry = c(7, 14, 28, 32, 64), ntree = c(50, 100, 200, 500, 1000))
+resamp_method = "cv" # can be c(cv, repeatedcv, LOOCV)
+kfold = 5
+cv_times = 20
+training_frac = 0.80
+cross_val = NULL
+perf_metric_function = NULL
+perf_metric_name = NULL
+group_partitions = NULL
+class_weight = FALSE
+jobs = 6
+seed = 123
+######### CHANGE ME ######### 
+
+library(tidyverse)
+library(SeqBiomeML)
+jsn <- run_ml(dataset = df, metadata = Metadata, method = "xgbTree", outcome_colname = "Product", group_colname = NULL, 
+              kfold = 5, cv_times = 20, resamp_method = "cv",
+              find_feature_importance = TRUE, jobs = 8, seed = 123)
+
+set.seed(seed)
+####### Source some functions from files #######
+in_path = "/home/shriram/Desktop/Rprojects/ML/Processed_data/mikropml/mikropml_ML/"
+source_func <- function(file, func)
+{
+  tmp_env <- new.env()
+  source(paste0(in_path, file), local = tmp_env)
+  for (i in func) {
+     assign(i, get(i, envir = tmp_env), envir = parent.frame()) 
+  }
+}
+
+
+# Check for any space in the outcome_colname of Metadata
+### @utils.R -> Function-3
+in_func <- c("replace_spaces")
+source_func(file = "utils.R", func = in_func)
+metadata[[outcome_colname]] <- replace_spaces(metadata[[outcome_colname]])
+if (!is.null(group_colname)) {
+  metadata[[group_colname]] <- replace_spaces(metadata[[group_colname]])
+}
+rm(list = in_func)
+
+
+# Check for any missing or NA data for the metadata
+### @checks.R -> Function-1 and Function-2
+in_func <- c("check_outcome_column", "check_outcome_value")
+source_func(file = "checks.R", func = in_func)
+outcome_colname <- check_outcome_column(dataset = metadata, outcome_colname = outcome_colname)
+rm(list = in_func)
+
+
+# Can't have categorical features for feature importance because have to find correlations
+### @checks.R -> Function-3
+in_func <- c("check_cat_feats")
+source_func(file = "checks.R", func = in_func)
+check_cat_feats(dataset)
+rm(list = in_func)
+
+
+# shuffle and randomized outcome_colname
+### @utils.R -> Function-1
+in_func <- c("randomize_feature_order")
+source_func(file = "utils.R", func = in_func)
+dataset <- randomize_feature_order(dataset) %>% as.data.frame()
+rm(list = in_func)
+
+
+# pull outcomes vector and groups vector
+outcomes_vctr <- metadata %>% dplyr::pull(outcome_colname)
+if (is.null(group_colname)) {
+  groups <- NULL
+} else {
+  groups <- metadata %>% dplyr::pull(group_colname)
+}
+
+
+# Check training fraction value
+### @checks.R -> Function-4
+in_func <- c("check_training_frac")
+source_func(file = "checks.R", func = in_func)
+check_training_frac(training_frac)
+rm(list = in_func)
+
+
+# Get indices to split dataset into train
+### @partition.R -> Function-1 and Function-2
+in_func <- c("get_partition_indices", "create_grouped_data_partition")
+source_func(file = "partition.R", func = in_func)
+if (length(training_frac) == 1) {
+  training_inds <- get_partition_indices(outcomes_vctr,
+                                         training_frac = training_frac,
+                                         groups = groups,
+                                         group_partitions = group_partitions
+  )
+  if (class_weight == TRUE) {
+    case_weights_vctr <- metadata %>%
+      filter(row.names(.) %in% training_inds) %>%
+      count(!!!syms(outcome_colname)) %>%
+      mutate(weight = n / sum(n)) %>%
+      select(outcome_colname, weight) %>%
+      right_join(metadata, by = outcome_colname) %>%
+      pull(weight)
+  }
+} else {
+  training_inds <- training_frac
+  training_frac <- length(training_inds) / nrow(dataset)
+  message(
+    paste0(
+      "Using the custom training set indices provided by `training_frac`.
+      The fraction of data in the training set will be ",
+      round(training_frac, 2)
+    )
+  )
+}
+rm(list = in_func)
+
+
+
+
+
+# Check that training indices falls within range of dataset
+### @checks.R -> Function-5
+### @utils.R -> Function-2
+in_func <- c("check_training_indices", "is_whole_number")
+source_func(file = "checks.R", func = in_func[1])
+source_func(file = "utils.R", func = in_func[2])
+check_training_indices(training_inds, dataset)
+rm(list = in_func)
+
+
+# Get train and test data
+train_data <- dataset[training_inds, ]
+test_data <- dataset[-training_inds, ]
+
+# train_groups & test_groups will be NULL if groups is NULL
+train_groups <- groups[training_inds]
+test_groups <- groups[-training_inds]
+
+# subset metadata for train and test
+train_metadata <- metadata[training_inds, ]
+test_metadata <- metadata[-training_inds, ]
+
+
+# Set hyper-parameter and tun-grid
+in_func <- c("get_hyperparams_list", "set_hparams_glmnet", "set_hparams_rf", "set_hparams_rpart2", 
+             "set_hparams_svmRadial", "set_hparams_xgbTree", "get_tuning_grid", "custom_method_grid")
+source_func(file = "hyperparameters.R", func = in_func)
+### @hyperparameters.R -> Function-1 to Function-8
+if (is.null(hyperparameters) & !grepl("custom", method)) {
+  hyperparameters <- get_hyperparams_list(dataset, method)
+  tune_grid <- get_tuning_grid(hyperparameters, method)
+} else if (!is.null(hyperparameters) & !grepl("custom", method)) {
+  tune_grid <- get_tuning_grid(hyperparameters, method)
+} else if (grepl("custom", method)) {
+  tune_grid <- get_tuning_grid(hyperparameters, method)
+  customrf_param = custom_method_grid(method = "customrf")
+}
+rm(list = in_func)
+
+
+# Get type of predicting variable
+### @performance.R -> Function-1
+in_func <- c("get_outcome_type")
+source_func(file = "performance.R", func = in_func)
+outcome_type <- get_outcome_type(outcomes_vctr)
+class_probs <- outcome_type != "continuous"
+rm(list = in_func)
+
+
+# Get performance metric function
+### @performance.R -> Function-2 and Function-3
+in_func <- c("get_perf_metric_fn", "get_perf_metric_name")
+source_func(file = "performance.R", func = in_func)
+if (is.null(perf_metric_function)) {
+  perf_metric_function <- get_perf_metric_fn(outcome_type)
+}
+
+# Get performance metric name for cross-validation.
+if (is.null(perf_metric_name)) {
+  perf_metric_name <- get_perf_metric_name(outcome_type)
+}
+rm(list = in_func)
+
+
+
+# Define repeated cross-validation scheme and training parameters
+### @cross_val_unnested.R -> Function-1 to Function-4
+in_func <- c("define_cv_unnested", "keep_groups_in_cv_partitions", "create_grouped_k_multifolds", "get_seeds_trainControl_unnested")
+source_func(file = "cross_val_unnested.R", func = in_func)
+if (is.null(cross_val)) {
+  cross_val <- define_cv_unnested(
+    resamp_method = resamp_method, 
+    train_data = train_data,
+    train_metadata = train_metadata,
+    outcome_colname = outcome_colname,
+    hyperparams_list = hyperparameters,
+    perf_metric_function = perf_metric_function,
+    class_probs = class_probs,
+    kfold = kfold,
+    cv_times = cv_times,
+    groups = train_groups,
+    group_partitions = group_partitions
+  )
+} else {
+  cross_val = cross_val
+}
+rm(list = in_func)
+
+
+# Train model now
+### @train.R -> Function-1
+tic = Sys.time()
+in_func <- c("train_model")
+source_func(file = "train.R", func = in_func)
+doFuture::registerDoFuture()
+future::plan(future::multicore, workers = jobs)
+trained_model_caret <- train_model(
+  train_data = train_data,
+  train_metadata = train_metadata,
+  outcome_colname = outcome_colname,
+  method = method,
+  cv = cross_val,
+  perf_metric_name = perf_metric_name,
+  tune_grid = tune_grid,
+  weights = if (class_weight) case_weights_vctr else NULL
+  # after this pass on any extra arguments you may have with ... =
+)
+rm(list = in_func)
+toc = Sys.time()
+cat("Total time:", toc-tic, "\n")
+
+
+# Calculate performance of the model on test data
+### @performance.R -> Function-4 and Function-5
+in_func <- c("get_performance_tbl", "calc_perf_metrics")
+source_func(file = "performance.R", func = in_func)
+performance_tbl <- get_performance_tbl(
+  trained_model = trained_model_caret,
+  test_data = test_data,
+  test_metadata = test_metadata,
+  outcome_colname = outcome_colname,
+  perf_metric_function = perf_metric_function,
+  perf_metric_name = perf_metric_name,
+  class_probs = class_probs,
+  method = method,
+  seed = seed
+)
+rm(list = in_func)
+
+
+# Plot ROC curve
+### @plot.R -> Function-4 and Function-5
+in_func <- c("roc_plot_main", "roc_plot_function")
+source_func(file = "plot.R", func = in_func)
+roc_out = roc_plot_main(
+  trained_model = trained_model_caret, 
+  test_data = test_data, 
+  test_metadata = test_metadata, 
+  outcome_colname = outcome_colname, 
+  method = method)
+rm(list = in_func)
+
+
+#### Identify feature importance
+# Fit a decision ensemble to predict
+feature_importance_endo <- model2DE(
+  model = trained_model_caret$finalModel, 
+  model_type = "rf", 
+  data = train_data,
+  target = train_metadata$Disease_type, classPos = "Healthy",
+  filter = FALSE, discretize = FALSE, prune = FALSE
+)
+
+
+
+
+
+
+
+
+
+# Get precision and sensitivity data for ROC curve
+### @performance.R -> Function-6
+in_func <- c("calc_model_sensspec")
+source_func(file = "performance.R", func = in_func)
+tbl_sens_spec = calc_model_sensspec(
+  trained_model = trained_model_caret, 
+  test_data = test_data, 
+  test_metadata = test_metadata, 
+  outcome_colname = outcome_colname)
+rm(list = in_func)
+
+
+# Plot ROC curve
+### @performance.R -> Function-6
+### @plot.R -> Function-4
+in_func <- c("calc_mean_roc", "calc_mean_prc", "calc_mean_perf", "shared_ggprotos", "plot_mean_roc", "plot_mean_prc")
+source_func(file = "performance.R", func = in_func[1:3])
+source_func(file = "plot.R", func = in_func[4:6])
+roc_curve = tbl_sens_spec %>%
+    calc_mean_roc() %>%
+    plot_mean_roc()
+rm(list = in_func)
+
+
+# Get important features
+### @corr_feats.R -> Function-1 to Function-4
+### @feature_importance.R -> Function-1 to Function-4
+### @performance.R -> Function-2 to Function-5
+### @utils.R -> Function-5 to Function-7 
+in_func <- c("group_correlated_features", "get_binary_corr_mat", "cluster_corr_mat", "get_groups_from_clusters",
+             "get_feature_importance", "find_permuted_perf_metric", "lower_bound", "upper_bound",
+             "get_perf_metric_fn", "get_perf_metric_name", "get_performance_tbl", "calc_perf_metrics",
+             "split_outcome_features", "pbtick", "calc_pvalue")
+source_func(file = "corr_feats.R", func = in_func[1:4])
+source_func(file = "feature_importance.R", func = in_func[5:8])
+source_func(file = "performance.R", func = in_func[9:12])
+source_func(file = "utils.R", func = in_func[13:15])
+feature_importance_tbl <- get_feature_importance(
+  trained_model_caret,
+  test_data,
+  test_metadata,
+  outcome_colname,
+  perf_metric_function,
+  perf_metric_name,
+  class_probs,
+  method,
+  seed,
+  corr_thresh
+)
+rm(list = in_func)
+
+
+
+
+
+#### Pred wrapper for fastshap #####
+pred_train <- function(x, newdata) {
+  if (x$modelType == "Classification") {
+    predict(x, newdata, type="prob")[,2]
+  } else {
+    predict(x, newdata)
+  }
+}
+
+# estimate feature importance by shap values
+shap <- explain(object = trained_model_caret, X=test_data, pred_wrapper = pred_train, nsim = 5)
+plot_shap_beeswarm(shap = shap, x = test_data, size=1)
+plot_shap_bar(shap = shap, x = test_data)
+
+
+
+
+
+#### Plot per fold AUC
+uniq_obs <- levels(trained_model_caret$pred$obs)
+for_lift <- tibble(obs = trained_model_caret$pred$obs, pred = trained_model_caret$pred$CD, resample = trained_model_caret$pred$Resample)
+for_lift <- for_lift %>% separate(col = resample, into = c("folds", "reps"), sep = "\\.", remove = FALSE)
+lift_df <-  tibble()
+for (fold in unique(for_lift$folds)) {
+  fold_df <- dplyr::filter(for_lift, folds == fold)
+  lift_obj_data <- lift(obs ~ pred, data = fold_df, class = uniq_obs[1])$data
+  lift_obj_data$fold <- fold
+  lift_df <- bind_rows(lift_df, lift_obj_data) 
+}
+roc(for_lift$obs, for_lift$pred, ci=T)
+
+ggplot(lift_df) +
+    geom_line(aes(1 - Sp, Sn, color = fold)) +
+    scale_color_discrete(guide = guide_legend(title = "Fold"))
+
+
+```
+
