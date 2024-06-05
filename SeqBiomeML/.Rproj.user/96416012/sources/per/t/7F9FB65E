@@ -1,0 +1,26 @@
+{
+    "id": "7F9FB65E",
+    "path": "~/Desktop/Rprojects/ML/scripts/nestedcv_Final.Rmd",
+    "project_path": null,
+    "type": "r_markdown",
+    "hash": "2330951560",
+    "contents": "",
+    "dirty": false,
+    "created": 1716325044897.0,
+    "source_on_save": false,
+    "relative_order": 3,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "136,17",
+        "scrollLine": "125"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1716333145,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1716333145781,
+    "read_only": false,
+    "read_only_alternatives": []
+}

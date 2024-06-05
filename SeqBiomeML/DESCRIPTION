@@ -11,14 +11,14 @@ Depends:
     R (>= 4.1.0)
 Imports:
     caret,
+    tidyverse,
     dplyr,
     e1071,
-    glmnet,
-    kernlab,
     MLmetrics,
+    matrixTests,
     randomForest,
     rlang,
-    rpart,
+    Rfast,
     stats,
     utils,
     xgboost,
@@ -29,19 +29,18 @@ Imports:
 Suggests:
     assertthat,
     doFuture,
-    forcats,
     foreach,
     future,
     future.apply,
-    furrr,
+    parallel,
     ggplot2,
+    rsample,
+    tidyr,
     knitr,
+    purrr,
     progress,
     progressr,
-    purrr,
-    rmarkdown,
-    rsample,
-    tidyr
+    rmarkdown
 VignetteBuilder: knitr
 Encoding: UTF-8
 RoxygenNote: 7.2.3

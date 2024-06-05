@@ -3,7 +3,7 @@
 #' Main function for nested cross validation
 nestedcvCore <- function(
   dataset,
-  metdata,
+  metadata,
   groups,
   method,
   outcomes_vctr,
@@ -26,8 +26,9 @@ nestedcvCore <- function(
   seed
 ) {
 
+  out_fold <- paste0("Fold", out_fold)
   tic = Sys.time()
-  message_parallel("Starting Fold", out_fold, " ...")
+  message_parallel("Starting ", out_fold, " ...")
 
   # Get the data, metadata and groups for inner fold
   tmp_data <- dataset[outer_folds[[out_fold]], ]
@@ -65,21 +66,26 @@ nestedcvCore <- function(
   }
 
 
-  # At this stage implement feature filtering
-  ### @filter_features.R -> Function-1 to function-11
+  # At this stage implement feature selection
+  ### @filter_features.R -> Function-1 to function-6
   if (filter_features) {
-    message("Performing feature filtering.")
-    filt_dataset <- preprocess_filter_featuress(
+    filt_dataset <- filter_features_main(
       train_data = tmp_data,
       train_metadata = tmp_metadata,
       outcome_colname = outcome_colname,
       filterFunList = filterFunList,
       grouped_feat = grouped_feat)
+    tmp_data = filt_dataset[[1]]
+    tmp_metadata = filt_dataset[[2]]
   } else {
-    filt_dataset <- list("filt_data"=tmp_data,
-                         "filt_metadata"=tmp_metadata,
-                         "final_feat"=colnames(tmp_data),
-                         "grouped_feat"=grouped_feat)
+    filt_dataset <- list(
+      dataset = tmp_data,
+      metadata = tmp_metadata,
+      final_feat = colnames(tmp_data),
+      grouped_feat = grouped_feat
+    )
+    tmp_data = filt_dataset[[1]]
+    tmp_metadata = filt_dataset[[2]]
   }
 
 
@@ -87,8 +93,8 @@ nestedcvCore <- function(
   ### @cross_val.R -> Function-1 to Function-4
   cross_val <- define_cv_nested(
     resamp_method = resamp_method,
-    train_data = filt_dataset[[1]],
-    train_metadata = filt_dataset[[2]],
+    train_data = tmp_data,
+    train_metadata = tmp_metadata,
     outcome_colname = outcome_colname,
     hyperparams_list = hyperparameters,
     perf_metric_function = perf_metric_function,
@@ -105,8 +111,8 @@ nestedcvCore <- function(
   doFuture::registerDoFuture()
   future::plan(future::multicore, workers = threads)
   trained_model_caret <- train_model(
-    train_data = filt_dataset[[1]],
-    train_metadata = filt_dataset[[2]],
+    train_data = tmp_data,
+    train_metadata = tmp_metadata,
     outcome_colname = outcome_colname,
     method = method,
     cv = cross_val,
@@ -142,7 +148,7 @@ nestedcvCore <- function(
     method = method)
 
     toc = Sys.time()
-    message_parallel("Finished Fold", out_fold, " (", format(toc - tic, digits = 3), ")")
+    message_parallel("Finished ", out_fold, " (", format(toc - tic, digits = 3), ")")
 
 
     # return

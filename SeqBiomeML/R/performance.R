@@ -89,10 +89,28 @@ get_performance_tbl <- function(trained_model,
     dplyr::mutate("method" = dplyr::if_else(grepl("custom", method), "custom", method)) %>%
     dplyr::mutate(data = "test")
 
+
   # train data
-  train_perf_metrics <- caret::getTrainPerf(trained_model)
-  names(train_perf_metrics) <- gsub("Train", "", names(train_perf_metrics))
-  train_perf_metrics <- dplyr::mutate(train_perf_metrics, data = "train")
+  rowIndex <- dplyr::inner_join(trained_model$pred, trained_model$bestTune)[, "rowIndex"]
+  train_metadata <- trained_model$trainingData %>% dplyr::select('.outcome') %>%
+    dplyr::rename_with(~outcome_colname, ".outcome") %>%
+    dplyr::mutate(row_num = dplyr::row_number()) %>%
+    dplyr::arrange(match(row_num, rowIndex))
+  pred_type <- "raw"
+  if (class_probs) pred_type <- "prob"
+  preds <- dplyr::inner_join(trained_model$pred, trained_model$bestTune) %>%
+    dplyr::select(as.character(train_metadata %>% dplyr::pull(outcome_colname)))
+  if (class_probs) {
+    uniq_obs <- unique(c(as.character(train_metadata %>% dplyr::pull(outcome_colname)), as.character(trained_model$pred$obs)))
+    obs <- factor(train_metadata %>% dplyr::pull(outcome_colname), levels = uniq_obs)
+    pred_class <- factor(names(preds)[apply(preds, 1, which.max)], levels = uniq_obs)
+    train_perf_metrics <- perf_metric_function(data.frame(obs = obs, pred = pred_class, preds), lev = uniq_obs)
+  } else {
+    obs <- test_metadata %>% dplyr::pull(outcome_colname)
+    train_perf_metrics <- perf_metric_function(data.frame(obs = obs, pred = preds))
+  }
+  train_perf_metrics <- train_perf_metrics %>% dplyr::bind_rows() %>%
+    dplyr::mutate(data = "train")
 
   # return
   return(

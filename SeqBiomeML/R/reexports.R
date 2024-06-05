@@ -31,7 +31,7 @@ utils::globalVariables(c("."))
 # The datasets cannot be loaded if these packages aren't declared in Imports.
 # See \url{https://community.rstudio.com/t/how-should-a-meta-package-handle-this-note-all-declared-imports-should-be-used/23400/3}
 #' @importFrom MLmetrics AUC
-#' @importFrom e1071 best.randomForest
+#' @importFrom e1071 classAgreement
 #' @importFrom glmnet glmnet
 #' @importFrom kernlab as.kernelMatrix
 #' @importFrom randomForest getTree
