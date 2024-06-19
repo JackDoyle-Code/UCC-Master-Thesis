@@ -4,17 +4,21 @@
 roc_plot_main <- function(trained_model, test_data, test_metadata, outcome_colname, method) {
   # get prediction from best train model across all folds
   mod_pred <- trained_model$pred %>%
-    dplyr::right_join(trained_model$bestTune, by = names(trained_model$bestTune))
-  uniq_obs <- levels(mod_pred$obs)
-  obs <- factor(mod_pred %>% dplyr::pull(obs), levels = uniq_obs)
-  roc.obj <- pROC::roc(obs, (mod_pred %>% dplyr::pull(uniq_obs[2])), ci=TRUE, direction = "<")
-  train_model <- list("train" = roc.obj)
+    dplyr::right_join(trained_model$bestTune, by = names(trained_model$bestTune)) # selects predictions with the best hyperparameter
+  uniq_obs <- levels(mod_pred[["obs"]]) ### changed $ to [[]]
+  obs <- factor(mod_pred[["obs"]], levels = uniq_obs) ### changed pull to [[]]
+  roc.obj <- pROC::roc(obs, (mod_pred %>% dplyr::pull(uniq_obs[2])), ci=TRUE, direction = "<") # builds an roc curve for plotting
+  #roc.obj <- multiclass.roc(obs, mod_pred[, uniq_obs], direction = "<")
+  train_model <- list("train" = roc.obj) # creates a list with roc.obj in it
 
   # get prediction from hold-out test dataset
   mod_pred <- stats::predict(trained_model, test_data, type = "prob")
-  uniq_obs <- levels(trained_model$pred$obs)
-  obs <- factor(test_metadata %>% dplyr::pull(outcome_colname), levels = uniq_obs)
+  uniq_obs <- levels(trained_model[["pred"]][["obs"]])
+  obs <- factor(test_metadata[[outcome_colname]], levels = uniq_obs)
   roc.obj <- pROC::roc(obs, (mod_pred %>% dplyr::pull(uniq_obs[2])), ci=TRUE, direction = "<")
+  # uses uniq_obs[2] because thats whats used in get_performance_metric
+  # 1-AUC for uniq_obs[2] = AUC for uniq_obs[1]
+  #roc.obj <- multiclass.roc(obs, mod_pred[, uniq_obs], direction = "<")
   test_model <- list("test" = roc.obj)
 
   # combine both
@@ -43,18 +47,18 @@ roc_plot_function <- function(roc.list, title.in, p.ci = FALSE, shuffle = TRUE) 
 
   # extracts auc
   roc.list %>%
-    purrr::map(~dplyr::tibble(AUC = .x$ci)) %>%
-    data.table::rbindlist(idcol = "name") %>%
-    dplyr::mutate(AUC = round(AUC, 2)) %>%
-    dplyr::group_by(name) %>%
-    dplyr::mutate(type=c("lower", "mean", "upper")) %>%
-    tidyr::pivot_wider(id_cols = name, names_from = type, values_from = AUC) %>%
-    dplyr::mutate(label_long = paste0(name, ", AUC = ", mean, " (", lower, "-", upper, ")")) -> data.labels
+    purrr::map(~dplyr::tibble(AUC = .x$ci)) %>% # extracts ci from the test and train roc and converts them to tibble
+    data.table::rbindlist(idcol = "name") %>% # binds the two lists as rows in a dataframe and adds a new column with test or train
+    dplyr::mutate(AUC = round(AUC, 2)) %>% # rounds the AUC column
+    dplyr::group_by(name) %>% # groups train together and test together
+    dplyr::mutate(type=c("lower", "mean", "upper")) %>% # adds type column to signify what type of interval it is
+    tidyr::pivot_wider(id_cols = name, names_from = type, values_from = AUC) %>% # turns each type into a column and removes AUC column. Values of AUC are put into their respective type columns
+    dplyr::mutate(label_long = paste0(name, ", AUC = ", mean, " (", lower, "-", upper, ")")) -> data.labels # adds another column called label_long which contains group (train/test), mean, and interval (lower-upper)
 
-  names(roc.list) <- data.labels$label_long
+  names(roc.list) <- data.labels$label_long # changes the list names from train/test to label_long
 
   p <- pROC::ggroc(c(roc.list), size = 1, legacy.axes = TRUE, aes = aes_ggroc) +
-    ggplot2::geom_line(size = 1) +
+    ggplot2::geom_line(linewidth = 1) +
     ggplot2::labs(x = "1-Specificity", y = "Sensitivity", title = title.in) +
     ggplot2::scale_color_manual(values = pal) +
     ggplot2::scale_linetype_manual(values = line_types) +
@@ -67,7 +71,7 @@ roc_plot_function <- function(roc.list, title.in, p.ci = FALSE, shuffle = TRUE) 
              legend.title = ggplot2::element_blank(),
              legend.text = ggplot2::element_text(size = 12, family = "sans", face = "plain"),
              plot.title = ggplot2::element_text(size = 12, vjust = 0.5, hjust = 0.5, family = "sans", face = "plain"),
-             legend.position = c(0.6, 0.1),
+             legend.position.inside = c(0.6, 0.1),
              legend.background = ggplot2::element_blank(),
              legend.box.background = ggplot2::element_rect(colour = "black")) +
     ggplot2::coord_equal()

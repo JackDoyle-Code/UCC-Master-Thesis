@@ -10,9 +10,9 @@ filter_features_main <- function(
   grouped_feat) {
 
   # remove features based on significance test
-  args <- list(y = train_metadata %>% dplyr::pull(outcome_colname), x = train_data)
-  args <- append(args, filterFunList[!names(filterFunList) %in% "test"])
-  fset <- do.call(filterFunList[["test"]], args)
+  args <- list(y = train_metadata[[outcome_colname]], x = train_data) ### replaced pull
+  args <- append(args, filterFunList[!names(filterFunList) %in% "test"]) # using filterFunList returns 0.05 and not $p_cutoff 0.05
+  fset <- do.call(filterFunList[["test"]], args) # calls the function (either wilcoxon/ttest)
   filt_xtrain <- train_data[, fset]
   final_feat <- colnames(train_data[, fset])
 

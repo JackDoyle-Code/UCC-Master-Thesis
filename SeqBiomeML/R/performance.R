@@ -85,38 +85,39 @@ get_performance_tbl <- function(trained_model,
     perf_metric_function,
     class_probs
   )
-  test_perf_metrics <- dplyr::bind_rows(test_perf_metrics) %>%
-    dplyr::mutate("method" = dplyr::if_else(grepl("custom", method), "custom", method)) %>%
+  # adds two new columns to the tibble, method and test (two new columns should contain rf and test)
+  test_perf_metrics <- dplyr::bind_rows(test_perf_metrics) %>% # converts to tibble (similar to dataframe)
+    dplyr::mutate("method" = dplyr::if_else(grepl("custom", method), "custom", method)) %>% # if grepl is true "custom" else method
     dplyr::mutate(data = "test")
 
 
   # train data
-  rowIndex <- dplyr::inner_join(trained_model$pred, trained_model$bestTune)[, "rowIndex"]
-  train_metadata <- trained_model$trainingData %>% dplyr::select('.outcome') %>%
-    dplyr::rename_with(~outcome_colname, ".outcome") %>%
-    dplyr::mutate(row_num = dplyr::row_number()) %>%
-    dplyr::arrange(match(row_num, rowIndex))
-  pred_type <- "raw"
-  if (class_probs) pred_type <- "prob"
-  preds <- dplyr::inner_join(trained_model$pred, trained_model$bestTune) %>%
-    dplyr::select(as.character(train_metadata %>% dplyr::pull(outcome_colname)))
+  rowIndex <- dplyr::inner_join(trained_model$pred, trained_model$bestTune)[, "rowIndex"] # selects rows indices from pred that have the bestTune hyperparameter
+  train_metadata <- trained_model$trainingData %>% dplyr::select('.outcome') %>% # .outcome is a column at the end of trainingData that contains the label for that sample
+    dplyr::rename_with(~outcome_colname, ".outcome") %>% # renmaes .outcome with outcome_colname
+    dplyr::mutate(row_num = dplyr::row_number()) %>% # new column with 1:nrow
+    dplyr::arrange(match(row_num, rowIndex)) # rearranges the new row so the values match the indices of rowIndex
+### removed two redundant lines
+### pulled uniq_obs, pred_class and obs out of the if. changed preds and created preds_probs. Removed obs from else. tidied up code.
+  preds <- dplyr::inner_join(trained_model$pred, trained_model$bestTune)
+  uniq_obs <- unique(as.character(train_metadata[[outcome_colname]])) # creates the levels (should be equal to number of unique groups in the outcome_colname)
+  pred_class <- preds[["pred"]] %>% factor(levels = uniq_obs) # gets the predicted groups for the best hyperparameter
+  obs <- preds[["obs"]] %>% factor(levels = uniq_obs) # gets the observed groups
   if (class_probs) {
-    uniq_obs <- unique(c(as.character(train_metadata %>% dplyr::pull(outcome_colname)), as.character(trained_model$pred$obs)))
-    obs <- factor(train_metadata %>% dplyr::pull(outcome_colname), levels = uniq_obs)
-    pred_class <- factor(names(preds)[apply(preds, 1, which.max)], levels = uniq_obs)
-    train_perf_metrics <- perf_metric_function(data.frame(obs = obs, pred = pred_class, preds), lev = uniq_obs)
-  } else {
-    obs <- test_metadata %>% dplyr::pull(outcome_colname)
-    train_perf_metrics <- perf_metric_function(data.frame(obs = obs, pred = preds))
+    preds_probs <- dplyr::select(preds, as.character(train_metadata[[outcome_colname]])) # selects columns from the predictions that have names in the outcome column
+    train_perf_metrics <- perf_metric_function(data.frame(obs = obs, pred = pred_class, preds_probs), lev = uniq_obs)
+  }
+  else {
+    train_perf_metrics <- perf_metric_function(data.frame(obs = obs, pred = pred_class), lev = uniq_obs)
   }
   train_perf_metrics <- train_perf_metrics %>% dplyr::bind_rows() %>%
-    dplyr::mutate(data = "train")
+    dplyr::mutate(data = "train") # adds a nee column with train in it
 
   # return
   return(
     dplyr::bind_rows(train_perf_metrics, test_perf_metrics) %>%
       dplyr::select(data, dplyr::everything()) %>%
-      dplyr::mutate(seed = seed)
+      dplyr::mutate(seed = seed) # binds the train and test performance metrics together and adds a seed column
     )
 }
 
@@ -124,18 +125,19 @@ get_performance_tbl <- function(trained_model,
 ### Function-5 ###
 #' @noRd
 #' Get performance metrics for test data
+#' ### changed some of the code. Pulled obbs and uniq_obs out of the if statement, removed obs from else and tidied up some code
 calc_perf_metrics <- function(test_data, test_metadata, trained_model, outcome_colname, perf_metric_function, class_probs) {
   pred_type <- "raw"
   if (class_probs) pred_type <- "prob"
   preds <- stats::predict(trained_model, test_data, type = pred_type)
+  uniq_obs <- unique(test_metadata[[outcome_colname]]) ### replaced pull and removed as.character(trained_model$pred$obs), all factors should be in outcome_colname
+  obs <- factor(test_metadata[[outcome_colname]], levels = uniq_obs)
   if (class_probs) {
-    uniq_obs <- unique(c(test_metadata %>% dplyr::pull(outcome_colname), as.character(trained_model$pred$obs)))
-    obs <- factor(test_metadata %>% dplyr::pull(outcome_colname), levels = uniq_obs)
     pred_class <- factor(names(preds)[apply(preds, 1, which.max)], levels = uniq_obs)
     perf_met <- perf_metric_function(data.frame(obs = obs, pred = pred_class, preds), lev = uniq_obs)
-  } else {
-    obs <- test_metadata %>% dplyr::pull(outcome_colname)
-    perf_met <- perf_metric_function(data.frame(obs = obs, pred = preds))
+  }
+  else {
+    perf_met <- perf_metric_function(data.frame(obs = obs, pred = preds), lev = uniq_obs)
   }
   return(perf_met)
 }
