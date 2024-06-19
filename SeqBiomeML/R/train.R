@@ -14,7 +14,8 @@ train_model <- function(train_data,
         if (startsWith(method, "svm")) {
           # some mutate
           train_data_tmp <- train_data %>%
-            dplyr::mutate(!!outcome_colname := (train_metadata %>% dplyr::pull(outcome_colname)))
+            dplyr::mutate(!!outcome_colname := (train_metadata %>% dplyr::pull(outcome_colname))) # adds the outcome column to
+          # train_data by unquoting it. := is the same as = but for dynamic values
 
           # https://github.com/topepo/caret/issues/809#issuecomment-875038420
           model_formula <- stats::as.formula(paste(outcome_colname, "~ ."))
@@ -27,7 +28,8 @@ train_model <- function(train_data,
             tuneGrid = tune_grid,
             ...
           )
-        } else {
+        }
+        else {
           features_train <- train_data
           outcomes_train <- train_metadata %>% dplyr::pull(outcome_colname)
           if (is.character(outcomes_train)) {
@@ -43,7 +45,8 @@ train_model <- function(train_data,
             ...
           )
         }
-      } else if (grepl("custom", method)) {
+      }
+      else if (grepl("custom", method)) {
         features_train <- train_data
         outcomes_train <- train_metadata %>% dplyr::pull(outcome_colname)
         if (is.character(outcomes_train)) {

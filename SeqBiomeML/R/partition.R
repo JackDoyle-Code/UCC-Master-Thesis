@@ -10,12 +10,12 @@ get_partition_indices <- function(outcomes,
       p = training_frac,
       list = FALSE
     ) %>% .[, 1]
-  } else {
+  }
+  else {
     training_inds <-
       create_grouped_data_partition(groups,
         group_partitions = group_partitions,
-        training_frac = training_frac
-      )
+        training_frac = training_frac)
   }
   return(training_inds)
 }

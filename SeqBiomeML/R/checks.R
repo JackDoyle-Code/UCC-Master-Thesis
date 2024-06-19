@@ -66,25 +66,15 @@ check_dataset <- function(dataset) {
 
 ### Function-5 ###
 #' @noRd
-#' Check that outcome column exists. Pick outcome column if not specified.
-check_outcome_column <- function(metadata, outcome_colname, check_values = TRUE, show_message = TRUE) {
+#' Check that outcome column exists. ### Removed untrue line here
+check_outcome_column <- function(metadata, outcome_colname) { ### Removed check_values and show_message (redundant)
   # If no outcome colname specified stop
   if (!outcome_colname %in% colnames(metadata)) {
     stop(paste0("Outcome '", outcome_colname, "' not in column names of metadata."))
   }
-
-  if (check_values) check_outcome_value(metadata, outcome_colname)
-
-  if (show_message) {
-    message(
-      paste0(
-        "Using '",
-        outcome_colname,
-        "' as the outcome column."
-      )
-    )
-  }
-
+  ### Removed redundant if statements
+  check_outcome_value(metadata, outcome_colname)
+  message(paste0("Using '", outcome_colname, "' as the outcome column."))
   return(outcome_colname)
 }
 
@@ -92,43 +82,36 @@ check_outcome_column <- function(metadata, outcome_colname, check_values = TRUE,
 ### Function-6 ###
 #' @noRd
 #' Check that the outcome variable is valid. Pick outcome value if necessary.
-check_outcome_value <- function(metadata, outcome_colname) {
-  # check no NA's
-  outcomes_vec <- metadata %>% dplyr::pull(outcome_colname)
-  num_missing <- sum(is.na(outcomes_vec))
-  if (num_missing != 0) {
-    stop(paste0("Missing data in the output variable is not allowed, but the outcome variable has ", num_missing, " missing value(s) (NA)."))
-  }
+  check_outcome_value <- function(metadata, outcome_colname) {
+    # check no NA's
+    outcomes_vec <- metadata[[outcome_colname]] ### Replaced dplyr::pull with [[]]
+    num_missing <- sum(is.na(outcomes_vec))
+    if (num_missing != 0) {
+      stop(paste0("Missing data in the output variable is not allowed, but the outcome variable has ", num_missing, " missing value(s) (NA)."))
+    }
 
-  # check for empty strings
-  num_empty <- sum(outcomes_vec == "")
-  if (num_empty != 0) {
-    warning(paste0("Possible missing data in the output variable: ", num_empty, " empty value(s)."))
-  }
+    # check for empty strings
+    num_empty <- sum(outcomes_vec == "")
+    if (num_empty != 0) {
+      warning(paste0("Possible missing data in the output variable: ", num_empty, " empty value(s)."))
+    }
+    # check if continuous outcome
+    isnum <- is.numeric(outcomes_vec)
+    if (isnum) {
+      # check if it might actually be categorical
+      if (all(floor(outcomes_vec) == outcomes_vec)) {
+        warning("Data is being considered numeric, but all outcome values are integers. If you meant to code your values as categorical, please use character values.")
+      }
+    }
 
-  outcomes_all <- metadata %>% dplyr::pull(outcome_colname)
-
-  # check if continuous outcome
-  isnum <- is.numeric(outcomes_all)
-  if (isnum) {
-    # check if it might actually be categorical
-    if (all(floor(outcomes_all) == outcomes_all)) {
-      warning("Data is being considered numeric, but all outcome values are integers. If you meant to code your values as categorical, please use character values.")
+    # check binary and multiclass outcome
+    outcomes <- unique(outcomes_vec) ### removed unnecessary piping
+    num_outcomes <- length(outcomes)
+    if (num_outcomes < 2) {
+      stop(paste0("A binary or multi-class outcome variable is required, but this dataset has ",
+          num_outcomes, " outcome(s): ", paste(outcomes, collapse = ", ")))
     }
   }
-
-  # check binary and multiclass outcome
-  outcomes <- outcomes_all %>% unique()
-  num_outcomes <- length(outcomes)
-  if (num_outcomes < 2) {
-    stop(
-      paste0(
-        "A binary or multi-class outcome variable is required, but this dataset has ",
-        num_outcomes, " outcome(s): ", paste(outcomes, collapse = ", ")
-      )
-    )
-  }
-}
 
 
 ### Function-7 ###
@@ -148,12 +131,12 @@ check_kfold <- function(kfold, dataset) {
   not_a_number <- !is.integer(kfold) & !is.numeric(kfold)
   not_an_int <- kfold != as.integer(kfold)
   nfeats <- ncol(dataset)
-  out_of_range <- (kfold <= 1) | (kfold > nfeats)
-  if (not_a_number | not_an_int | out_of_range) {
-    stop(paste0(
-      "`kfold` must be an integer between 1 and the number of features in the data.\n",
-      "  You provided ", kfold, " folds and your dataset has ", nfeats, " features."
-    ))
+  if (not_a_number | not_an_int | kfold <= 1) {
+    stop(paste0("`kfold` must be an integer between 1 and the number of features in the data.\n",
+      "  You provided ", kfold, " folds and your dataset has ", nfeats, " features."))
+  }
+  if (nrow(dataset) < 1000) {
+    warning("Sample size is < 1000 in length. Using k-fold cv may produce biased results. Consider using alternative method")
   }
 }
 
@@ -166,7 +149,7 @@ check_groups <- function(metadata, group_colname) {
   if (is.null(group_colname)) {
     groups = NULL
   } else {
-    groups = metadata %>% dplyr::pull(group_colname)
+    groups = metadata[[group_colname]] ### replaced dplyr pull
   }
   isvec <- is.vector(groups)
   isnull <- is.null(groups)
@@ -202,25 +185,18 @@ check_group_partitions <- function(metadata, group_colname, group_partitions) {
   if (is.null(group_partitions)) {
     return()
   }
-  groups = metadata %>% dplyr::pull(group_colname)
+  groups = metadata[[group_colname]] ### replaced dplyr pull
 
   names_unrecognized <-
     names(group_partitions[!names(group_partitions) %in% c("train", "test")])
   if (length(names_unrecognized) > 0) {
-    stop(paste(
-      "Unrecognized name(s) in `group_partitions`:",
-      paste(names_unrecognized, collapse = " ")
-    ))
+    stop(paste("Unrecognized name(s) in `group_partitions`:",
+      paste(names_unrecognized, collapse = " ")))
   }
-  groups_unrecognized <- setdiff(
-    group_partitions %>% unlist(),
-    groups %>% unique()
-  ) %>% sort()
+  groups_unrecognized <- setdiff(unlist(group_partitions), unique(groups)) %>% sort()
   if (length(groups_unrecognized) > 0) {
-    stop(paste(
-      "`group_partitions` contains group names not in groups vector:",
-      paste(groups_unrecognized, collapse = " ")
-    ))
+    stop(paste("`group_partitions` contains group names not in groups vector:",
+      paste(groups_unrecognized, collapse = " ")))
   }
 }
 

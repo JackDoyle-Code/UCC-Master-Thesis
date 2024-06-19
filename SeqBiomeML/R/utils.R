@@ -2,13 +2,10 @@
 #' @noRd
 #' Randomize feature order to eliminate any position-dependent effects
 randomize_feature_order <- function(dataset) {
-  features_reordered <- dataset %>%
-    colnames() %>%
+  features_reordered <- colnames(dataset) %>%
     sample()
   dataset <- dplyr::select(
-    dataset,
-    dplyr::all_of(features_reordered)
-  )
+    dataset, all_of(features_reordered)) ### removing all_of function provides error saying it has depreciated
   return(dataset)
 }
 

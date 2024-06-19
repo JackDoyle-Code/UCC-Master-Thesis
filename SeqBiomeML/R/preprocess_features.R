@@ -52,7 +52,6 @@ collapse_correlated_features <- function(features,
                                          group_neg_corr) {
   feats_nocorr <- features
   grp_feats <- NULL
-  sapply_fn = utils::getFromNamespace("future_sapply", "future.apply")
   if (ncol(features) != 1) {
     corr_feats <- group_correlated_features(
       features = features,
@@ -62,7 +61,7 @@ collapse_correlated_features <- function(features,
     )
     corr_cols <- gsub("\\|.*", "", corr_feats)
     feats_nocorr <- features %>% dplyr::select(dplyr::all_of(corr_cols))
-    names_grps <- sapply_fn(names(feats_nocorr), function(n) {
+    names_grps <- sapply(names(feats_nocorr), function(n) {
       not_corr <- n %in% corr_feats
       if (not_corr) {
         name <- n
@@ -81,10 +80,7 @@ collapse_correlated_features <- function(features,
     } else {
       names(names_grps)[grp_cols] <- paste0("grp", 1:num_grps)
       names(feats_nocorr) <- names(names_grps)
-      grp_feats <-
-      sapply_fn(names_grps, function(x) {
-        x
-      })
+      grp_feats <- names_grps
     }
   }
   return(list(features = feats_nocorr, grp_feats = grp_feats))
@@ -144,9 +140,8 @@ cluster_corr_mat <- function(bin_corr_mat,
   }
   return(stats::cutree(
     stats::hclust(dist_mat,
-                  method = hclust_method
-    ),
-    h = cut_height
+                  method = hclust_method),
+    h = cut_height # groups correlated features together, priorities more closely correlated features
   ))
 }
 
@@ -155,13 +150,8 @@ cluster_corr_mat <- function(bin_corr_mat,
 #' @noRd
 #' Assign features to groups
 get_groups_from_clusters <- function(cluster_ids) {
-  # Call `sort()` with `method = 'radix'`
-  radix_sort <- function(...) {
-    return(sort(..., method = "radix"))
-  }
-
   feat_groups <- character(length = max(cluster_ids))
-  for (feat in radix_sort(names(cluster_ids))) { # assign each feature to its group/cluster
+  for (feat in names(cluster_ids)) { # assign each feature to its group/cluster
     cluster_id <- cluster_ids[[feat]]
     current_cluster <- feat_groups[cluster_id]
     if (nchar(current_cluster) > 0) {
@@ -171,7 +161,7 @@ get_groups_from_clusters <- function(cluster_ids) {
     }
     feat_groups[cluster_id] <- new_cluster
   }
-  return(radix_sort(feat_groups))
+  return(feat_groups)
 }
 
 
@@ -179,7 +169,7 @@ get_groups_from_clusters <- function(cluster_ids) {
 #' @noRd
 #' Get preprocessed dataframe for continuous variables
 get_caret_processed_df <- function(features, method) {
-  check_preprocess_methods(method)
+  ### removed check_preprocess_methods as this should already be checked
   processed <- features
   removed <- NULL
   if (!is.null(method)) {

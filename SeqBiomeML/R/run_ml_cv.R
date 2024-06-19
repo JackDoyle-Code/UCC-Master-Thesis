@@ -1,8 +1,8 @@
-#' Run the machine learning pipeline
+ #' Run the machine learning pipeline
 #'
 #' This function splits the data set into a train & test set,
 #' trains machine learning (ML) models using k-fold cross-validation or repeated cross-validation or,
-#' leave one out cross valication and it evaluates the best model on the held-out test set,
+#' leave one out cross validation and it evaluates the best model on the held-out test set,
 #' and it optionally calculates feature importance using the framework
 #'
 #' Required inputs are a count table, the metadata file and the ML method.
@@ -167,11 +167,11 @@ run_ml_cv <-
 
 
     # pull outcomes vector and groups vector
-    outcomes_vctr <- metadata %>% dplyr::pull(outcome_colname)
+    outcomes_vctr <- metadata[[outcome_colname]] ### replaced dplyr pull
     if (is.null(group_colname)) {
       groups <- NULL
     } else {
-      groups <- metadata %>% dplyr::pull(group_colname)
+      groups <- metadata[[group_colname]] ### replaced dplyr pull
     }
 
 
@@ -213,11 +213,11 @@ run_ml_cv <-
       )
       if (class_weight == TRUE) {
         case_weights_vctr <- metadata %>%
-          dplyr::filter(row.names(.) %in% training_inds) %>%
-          dplyr::count(!!rlang::syms(outcome_colname)) %>%
-          dplyr::mutate(weight = n / sum(n)) %>%
-          dplyr::select(outcome_colname, weight) %>%
-          dplyr::right_join(metadata, by = outcome_colname) %>%
+          dplyr::filter(row.names(.) %in% training_inds) %>% # same as metadata[row.names(metadata) ...]
+          dplyr::count(!!rlang::sym(outcome_colname)) %>% # sym unquotes the colname, counts the group rows
+          dplyr::mutate(weight = n / sum(n)) %>% # adds a column called weight calculated as such
+          dplyr::select(outcome_colname, weight) %>% # select just the outcome_colname and weight
+          dplyr::right_join(metadata, by = outcome_colname) %>% # adds weight to the metadata using outcome_colname as joining point
           dplyr::pull(weight)
       }
     } else {
@@ -257,10 +257,12 @@ run_ml_cv <-
     ### @hyperparameters.R -> Function-1 to Function-8
     if (is.null(hyperparameters) & !grepl("custom", method)) {
       hyperparameters <- get_hyperparams_list(dataset, method)
+      tune_grid <- get_tuning_grid(hyperparameters, method) # produces a matrix of all possible combinations of parameters
+    }
+    else if (!is.null(hyperparameters) & !grepl("custom", method)) {
       tune_grid <- get_tuning_grid(hyperparameters, method)
-    } else if (!is.null(hyperparameters) & !grepl("custom", method)) {
-      tune_grid <- get_tuning_grid(hyperparameters, method)
-    } else if (grepl("custom", method)) {
+    }
+    else if (grepl("custom", method)) {
       tune_grid <- get_tuning_grid(hyperparameters, method)
       customrf_param = custom_method_grid(method = method)
     }
@@ -268,7 +270,7 @@ run_ml_cv <-
 
     # Get type of predicting variable
     ### @performance.R -> Function-1
-    outcome_type <- get_outcome_type(outcomes_vctr)
+    outcome_type <- get_outcome_type(outcomes_vctr) # checks if outcome type is continous/binary/multiclass
     class_probs <- outcome_type != "continuous"
 
     # Get performance metric function
@@ -389,19 +391,20 @@ run_ml_cv <-
         message("Performing feature importance analysis using permutation")
         # Feature importance analysis and plot
         ### @feature_importance.R -> Function-1
-          feat_imp = feature_importance_permuted(
+          feat_imp = with_progress(feature_importance_permuted(
             trained_model = trained_model_caret,
             test_data = test_data,
             test_metadata = test_metadata,
             outcome_colname = outcome_colname,
             perf_metric_function = perf_metric_function,
             perf_metric_name = perf_metric_name,
+            performance_table = performance_tbl,
             class_probs = class_probs,
             method = method,
             grouped_features_list = NULL,
             seed = seed,
             nperms = 100,
-            threads = threads)
+            threads = threads))
       }
     } else {
       message("Skipping feature importance analysis.")
