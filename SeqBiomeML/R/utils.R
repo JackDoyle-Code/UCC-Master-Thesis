@@ -13,8 +13,8 @@ randomize_feature_order <- function(dataset) {
 ### Function-2 ###
 #' @noRd
 #' Check whether a numeric vector contains whole numbers.
-is_whole_number <- function(x, tol = .Machine$double.eps^0.5) {
-  abs(x - round(x)) < tol
+is_whole_number <- function(x) {
+  floor(x) == x ### changed the function
 }
 
 

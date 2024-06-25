@@ -5,24 +5,27 @@
 #'
 #'
 preprocess_features <- function(
-  train_data, train_metadata, outcome_colname,
+  train_data, outcome_colname, ### removed metadata argument
   preprocess_methods = c("zv", "nzv", "center", "scale"),
-  corrFunList = corrFunList) {
+  corrFunList = corrFunList, method) {
+
+  # converts factor features to one-hot encoding
+  train_data <- get_caret_dummyvars_df(train_data, method)  ### added this line
 
   # remove zero or near zero variance features and center/ scale data
-  preprocess_data = train_data %>%
-    change_to_num() %>%
+  preprocess_data <- train_data %>%
+    #change_to_num() %>%
     get_caret_processed_df(method = preprocess_methods)
 
   # remove nearly or perfectly correlated features
-  train_data = collapse_correlated_features(
+  train_data <- collapse_correlated_features(
     features = preprocess_data[[1]],
     corr_thresh = corrFunList$corr_thresh,
     corr_method = corrFunList$corr_method,
     group_neg_corr = corrFunList$group_neg_corr)
 
     if (!is.null(train_data[[2]])) {
-      grouped_feat = utils::stack(train_data[[2]]) %>%
+      grouped_feat = utils::stack(train_data[[2]]) %>% # converts a list into two columns (one is the indices representing the list indices and the second is the values within the list)
       dplyr::select(ind, values) %>%
       dplyr::rename("feat_group"=ind, "feat_names"=values)
       message("A total of N=",
@@ -36,8 +39,7 @@ preprocess_features <- function(
   # return now
   return(list(
     filt_data = train_data[[1]],
-    filt_metadata = train_metadata,
-    final_feat = colnames(train_data[[1]]),
+    rem_feat = preprocess_data[[2]], ### removed colnames(train_data[[1]]) and filt_metadata, added rem_feat
     grouped_feat = grouped_feat
   ))
 }
@@ -184,9 +186,15 @@ get_caret_processed_df <- function(features, method) {
 ### Function-8 ###
 #' @noRd
 #' Get dummyvars dataframe (i.e. design matrix)
-get_caret_dummyvars_df <- function(features, full_rank = FALSE) {
-  check_cat_feats(features)
-  feature_design <- caret::dummyVars(" ~ .", data = features, fullRank = full_rank)
+### changed a lot of this function
+get_caret_dummyvars_df <- function(features, method) {
+  if (method == "glm") { # used to determine if multicollinearity needs to be accounted for
+    full_rank = T
+  }
+  else {
+    full_rank = F
+  }
+  feature_design <- caret::dummyVars(" ~ .", data = features, fullRank = full_rank) # ~. means it is considering all features (but will only convert factors)
   feature_design_mat <- stats::predict(feature_design, features)
   return(as.data.frame(feature_design_mat))
 }
@@ -196,8 +204,8 @@ get_caret_dummyvars_df <- function(features, full_rank = FALSE) {
 #' @noRd
 #' Change columns to numeric if possible
 change_to_num <- function(features) {
-  lapply_fn = utils::getFromNamespace("future_lapply", "future.apply")
-  features[] <- lapply_fn(features, function(col) {
+  lapply_fn = utils::getFromNamespace("future_lapply", "future.apply") ### removed lapply_fn which called future_lapply
+  features[] <- lapply_fn(features, function(col) { ### replaced lapply_fn with lapply
     if (suppressWarnings(all(!is.na(as.numeric(as.character(col)))))) {
       as.numeric(as.character(col))
     } else {

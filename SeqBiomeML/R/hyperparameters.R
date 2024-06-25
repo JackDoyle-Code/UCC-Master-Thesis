@@ -12,9 +12,7 @@ get_hyperparams_list <- function(dataset, method) {
     svmRadial = rlang::quo(set_hparams_svmRadial()),
     xgbTree = rlang::quo(set_hparams_xgbTree(n_samples))
   )
-  if (!(method %in% names(hparams_functions))) {
-    stop(paste0("method '", method, "' is not supported."))
-  }
+  ### removed if statement here (redundant)
   return(rlang::eval_tidy(hparams_functions[[method]]))
 }
 
@@ -91,7 +89,7 @@ set_hparams_xgbTree <- function(n_samples) {
 get_tuning_grid <- function(hyperparams_list, method) {
   return(hyperparams_list %>%
     expand.grid() %>%
-    dplyr::mutate_all(utils::type.convert, as.is = TRUE))
+    dplyr::mutate_all(utils::type.convert, as.is = TRUE)) # makes sure the types are correct
 }
 
 

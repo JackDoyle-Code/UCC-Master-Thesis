@@ -125,32 +125,34 @@ run_ml_cv <-
 
           jobs = 1,
           threads = 1,
-          seed = NA,
+          seed = NULL, ### changed seed from NA to NULL
           ...) {
 
 
     message("Performing various checks on datasets, metadata and supplied params.")
     # Various checks
     ### @checks.R -> Function-1 and Function-12
-    check_all(
-      dataset,
-      metadata,
-      outcome_colname,
-      method,
-      preprocess_methods,
-      kfold,
-      perf_metric_function,
-      perf_metric_name,
-      group_colname,
-      group_partitions,
-      seed,
-      hyperparameters
-    )
+    check_out <- check_all(
+                  dataset,
+                  metadata,
+                  outcome_colname,
+                  method,
+                  preprocess_methods,
+                  kfold,
+                  perf_metric_function,
+                  perf_metric_name,
+                  group_colname,
+                  group_partitions,
+                  seed,
+                  hyperparameters
+                )
 
-    # set seed if provided #
-    if (!is.na(seed)) {
-      set.seed(seed)
-    }
+    # extracts check_all outputs
+    outcome_colname <- check_out[[1]]
+    na_vals <- check_out[[2]]
+
+    # set seed if provided
+    set.seed(seed) ### removed if is.na as seed is now null by default
 
 
     # Check for any space in the outcome_colname of Metadata
@@ -178,14 +180,15 @@ run_ml_cv <-
     # At this stage implement feature preprocessing
     ### @preprocess_features.R -> Function-1 to function-9
     message("Performing preprocessing of dataset.")
-    filt_dataset <- preprocess_features(train_data = dataset,
-                                        train_metadata = metadata,
+    filt_dataset <- preprocess_features(train_data = dataset, ### removed metadata argument
                                         outcome_colname = outcome_colname,
                                         preprocess_methods = preprocess_methods,
-                                        corrFunList = corrFunList)
+                                        corrFunList = corrFunList,
+                                        method = method) ### added the argument method
     dataset = filt_dataset[[1]]
-    metadata = filt_dataset[[2]]
-    grouped_feat = filt_dataset[[4]]
+    ### removed metadata = filt_dataset[[2]] (redundant)
+    rem_feat = filt_dataset[[2]] # removed by preprocessing (e.g. nzv) ### added this line
+    grouped_feat = filt_dataset[[3]] # correlated features
 
 
     # At this stage implement feature selection
@@ -209,12 +212,10 @@ run_ml_cv <-
       training_inds <- get_partition_indices(outcomes_vctr,
                                              training_frac = training_frac,
                                              groups = groups,
-                                             group_partitions = group_partitions
-      )
+                                             group_partitions = group_partitions)
       if (class_weight == TRUE) {
-        case_weights_vctr <- metadata %>%
-          dplyr::filter(row.names(.) %in% training_inds) %>% # same as metadata[row.names(metadata) ...]
-          dplyr::count(!!rlang::sym(outcome_colname)) %>% # sym unquotes the colname, counts the group rows
+        case_weights_vctr <- metadata[training_inds] %>% ### removed filter(row.names()) and replaced with subsetting
+          dplyr::count(!!rlang::sym(outcome_colname)) %>% # sym unquotes the colname, counts the number of rows for each group (e.g. control)
           dplyr::mutate(weight = n / sum(n)) %>% # adds a column called weight calculated as such
           dplyr::select(outcome_colname, weight) %>% # select just the outcome_colname and weight
           dplyr::right_join(metadata, by = outcome_colname) %>% # adds weight to the metadata using outcome_colname as joining point
@@ -223,13 +224,9 @@ run_ml_cv <-
     } else {
       training_inds <- training_frac
       training_frac <- length(training_inds) / nrow(dataset)
-      message(
-        paste0(
+      message(paste0(
           "Using the custom training set indices provided by `training_frac`.
-          The fraction of data in the training set will be ",
-          round(training_frac, 2)
-        )
-      )
+          The fraction of data in the training set will be ", round(training_frac, 2)))
     }
 
 
@@ -415,6 +412,7 @@ run_ml_cv <-
     # return
     return(
         list(
+          "NA_values" = na_vals,
           "dataset" = filt_dataset,
           "test_data" = test_data,
           "test_metadata" = test_metadata,
