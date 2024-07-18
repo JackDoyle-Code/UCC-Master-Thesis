@@ -5,17 +5,12 @@
 #'
 #'
 preprocess_features <- function(
-  train_data, outcome_colname, ### removed metadata argument
+  train_data, test_data, outcome_colname, ### removed metadata argument
   preprocess_methods = c("zv", "nzv", "center", "scale"),
-  corrFunList = corrFunList, method) {
-
-  # converts factor features to one-hot encoding
-  train_data <- get_caret_dummyvars_df(train_data, method)  ### added this line
+  corrFunList = corrFunList) {
 
   # remove zero or near zero variance features and center/ scale data
-  preprocess_data <- train_data %>%
-    #change_to_num() %>%
-    get_caret_processed_df(method = preprocess_methods)
+  preprocess_data <- get_caret_processed_df(train_data, test_data, method = preprocess_methods) ### removed change_to_num call
 
   # remove nearly or perfectly correlated features
   train_data <- collapse_correlated_features(
@@ -38,8 +33,9 @@ preprocess_features <- function(
 
   # return now
   return(list(
-    filt_data = train_data[[1]],
-    rem_feat = preprocess_data[[2]], ### removed colnames(train_data[[1]]) and filt_metadata, added rem_feat
+    filt_train_data = train_data[[1]],
+    filt_test_data = preprocess_data[[2]],
+    rem_feat = preprocess_data[[3]], ### removed colnames(train_data[[1]]) and filt_metadata, added rem_feat
     grouped_feat = grouped_feat
   ))
 }
@@ -170,16 +166,16 @@ get_groups_from_clusters <- function(cluster_ids) {
 ### Function-7 ###
 #' @noRd
 #' Get preprocessed dataframe for continuous variables
-get_caret_processed_df <- function(features, method) {
+get_caret_processed_df <- function(features, test_data, method) {
   ### removed check_preprocess_methods as this should already be checked
-  processed <- features
   removed <- NULL
   if (!is.null(method)) {
     preproc_values <- caret::preProcess(features, method = method)
-    processed <- stats::predict(preproc_values, features)
-    removed <- names(features)[!names(features) %in% names(processed)]
+    processed_train <- stats::predict(preproc_values, features)
+    processed_test <- stats::predict(preproc_values, test_data) ### added this line
+    removed <- names(features)[!names(features) %in% names(processed_train)]
   }
-  return(list(processed = processed, removed = removed))
+  return(list(processed_train = processed_train, processed_test = processed_test, removed = removed))
 }
 
 
@@ -199,18 +195,4 @@ get_caret_dummyvars_df <- function(features, method) {
   return(as.data.frame(feature_design_mat))
 }
 
-
-### Function-9 ###
-#' @noRd
-#' Change columns to numeric if possible
-change_to_num <- function(features) {
-  lapply_fn = utils::getFromNamespace("future_lapply", "future.apply") ### removed lapply_fn which called future_lapply
-  features[] <- lapply_fn(features, function(col) { ### replaced lapply_fn with lapply
-    if (suppressWarnings(all(!is.na(as.numeric(as.character(col)))))) {
-      as.numeric(as.character(col))
-    } else {
-      col
-    }
-  })
-  return(features)
-}
+### removed change_to_num function, fairly sure it's redundant

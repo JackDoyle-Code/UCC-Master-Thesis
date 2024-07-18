@@ -104,6 +104,8 @@ run_ml_cv <-
           outcome_colname = NULL,
           group_colname = NULL,
 
+          ### added scale method
+          scale_method = list("clr", "pseudo", 1),
           preprocess_methods = c("zv", "nzv"), # can be c("zv", "nzv", "center", "scale")
           corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE),
           filter_features = FALSE,
@@ -137,6 +139,7 @@ run_ml_cv <-
                   metadata,
                   outcome_colname,
                   method,
+                  scale_method,
                   preprocess_methods,
                   kfold,
                   perf_metric_function,
@@ -177,33 +180,10 @@ run_ml_cv <-
     }
 
 
-    # At this stage implement feature preprocessing
-    ### @preprocess_features.R -> Function-1 to function-9
-    message("Performing preprocessing of dataset.")
-    filt_dataset <- preprocess_features(train_data = dataset, ### removed metadata argument
-                                        outcome_colname = outcome_colname,
-                                        preprocess_methods = preprocess_methods,
-                                        corrFunList = corrFunList,
-                                        method = method) ### added the argument method
-    dataset = filt_dataset[[1]]
-    ### removed metadata = filt_dataset[[2]] (redundant)
-    rem_feat = filt_dataset[[2]] # removed by preprocessing (e.g. nzv) ### added this line
-    grouped_feat = filt_dataset[[3]] # correlated features
-
-
-    # At this stage implement feature selection
-    ### @filter_features.R -> Function-1 to function-6
-    if (filter_features) {
-      message("Performing feature filtering.")
-      filt_dataset <- filter_features_main(train_data = dataset,
-                                           train_metadata = metadata,
-                                           outcome_colname = outcome_colname,
-                                           filterFunList = filterFunList,
-                                           grouped_feat = grouped_feat)
-      dataset = filt_dataset[[1]]
-      metadata = filt_dataset[[2]]
-    }
-
+    # Sample preprocessing is implemented prior to data partition
+    ### @preprocess_samples.R -> Function-1 to function-2
+    dataset <- preprocess_samples(dataset = dataset,
+                                  scale_method = scale_method)
 
     message("Creating data partition.")
     # Get indices to split dataset into train
@@ -247,6 +227,35 @@ run_ml_cv <-
     # subset metadata for train and test
     train_metadata <- metadata[training_inds, ]
     test_metadata <- metadata[-training_inds, ]
+
+
+    # At this stage implement feature preprocessing
+    ### @preprocess_features.R -> Function-1 to function-9
+    message("Performing preprocessing of dataset.")
+    filt_dataset <- preprocess_features(train_data = train_data, ### removed metadata argument
+                                        test_data = test_data,
+                                        outcome_colname = outcome_colname,
+                                        preprocess_methods = preprocess_methods,
+                                        corrFunList = corrFunList)
+    train_data = filt_dataset[[1]]
+    ### removed metadata = filt_dataset[[2]] (redundant)
+    test_data = filt_dataset[[2]] ### added this line
+    rem_feat = filt_dataset[[3]] # removed by preprocessing (e.g. nzv) ### added this line
+    grouped_feat = filt_dataset[[4]] # correlated features
+
+
+    # At this stage implement feature selection
+    ### @filter_features.R -> Function-1 to function-6
+    if (filter_features) {
+      message("Performing feature filtering.")
+      filt_dataset <- filter_features_main(train_data = train_data,
+                                           train_metadata = train_metadata,
+                                           outcome_colname = outcome_colname,
+                                           filterFunList = filterFunList,
+                                           grouped_feat = grouped_feat)
+      train_data = filt_dataset[[1]]
+      train_metadata = filt_dataset[[2]]
+    }
 
 
     message("Creating tune grid.")

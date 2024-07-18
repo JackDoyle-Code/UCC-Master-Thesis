@@ -2,12 +2,13 @@
 #' @keywords internal
 #' @noRd
 #' Check all params that don't return a value
-check_all <- function(dataset, metadata, outcome_colname, method, preprocess_methods,
+check_all <- function(dataset, metadata, outcome_colname, method, scale_method, preprocess_methods,
                       kfold, perf_metric_function, perf_metric_name, group_colname,
                       group_partitions, seed, hyperparameters) {
 
   check_seed(seed)
   check_method(method, hyperparameters)
+  check_scale_method(scale_method)
   check_preprocess_methods(preprocess_methods)
   check_dataset(dataset)
   outcome_colname <- check_outcome_column(metadata, outcome_colname)
@@ -302,8 +303,25 @@ check_training_indices <- function(training_inds, dataset) {
 #' Check preprocess methods
 check_preprocess_methods <- function(preprocess_methods) {
   if (!is.null(preprocess_methods)) {
-    if (!all((preprocess_methods %in% c("zv", "nzv", "center", "scale")))) {
+    if (!all(preprocess_methods %in% c("zv", "nzv", "center", "scale"))) {
       stop(paste0("`preprocess_methods` must be one of: NULL, 'zv', 'nzv', 'center', 'scale'. You provided ", paste0(preprocess_methods, collapse = "  ")))
+    }
+  }
+}
+
+### Function-16 ###
+#' @noRd
+#' Check scale methods
+check_scale_method <- function(scale_method) {
+  if (!is.null(scale_method)) {
+    if (!all(scale_method[[1]] %in% c("clr", "rclr", "tss", NULL))) {
+      stop(paste0("invalid scale method, must be one of: NULL, 'clr', 'rclr', 'tss'. You provided ", paste0(scale_method[[1]], collapse = "  ")))
+    }
+    if (!all(scale_method[[2]] %in% c("pseudo", "GBM", "BL", "SQ", "CZM", NULL))) {
+      stop(paste0("invalid imputation method, must be one of: NULL, 'pseudo', 'GBM', 'BL', 'SQ', 'CZM'. You provided ", paste0(scale_method[[2]], collapse = "  ")))
+    }
+    if (!as.numeric(scale_method[[3]]) | length(scale_method[[3]]) != 1) {
+      stop(paste0("imputation value must be numeric and of length 1. You provided ", paste0(scale_method[[3]], collapse = "  ")))
     }
   }
 }
