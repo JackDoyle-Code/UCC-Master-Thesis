@@ -1,11 +1,10 @@
 #### Function-1 ###
 #' @noRd
 #' Define cross-validation scheme and training parameters
-define_cv_unnested <- function(resamp_method, train_data, train_metadata, outcome_colname, hyperparams_list, perf_metric_function, class_probs, kfold, cv_times, groups, group_partitions, seed) {
+define_cv_unnested <- function(resamp_method, train_data, train_metadata, outcome_colname, hyperparams_list,
+                               perf_metric_function, class_probs, kfold, cv_times, groups, group_partitions, seed) {
   # set seed
-  if(!is.na(seed)) { ### added if statement
   set.seed(seed)
-  }
   # for cross-validation
   if(resamp_method == "cv") {
     if (keep_groups_in_cv_partitions(groups, group_partitions, kfold)) {
@@ -96,11 +95,10 @@ define_cv_unnested <- function(resamp_method, train_data, train_metadata, outcom
       ### Get index in and index out
       index_test <- vector(mode = "list", nrow(train_data)) ### replaced length(row.names()) with nrow()
       index_train <- vector(mode = "list", nrow(train_data)) ### replaced length(row.names()) with nrow()
-      j=0
-      for (i in row.names(train_data)) {
-        j = (j + 1)
-        index_test[[j]] <- which(row.names(train_data) %in% i) # puts one row in test
-        index_train[[j]] <- which(!row.names(train_data) %in% i) # puts the rest in train
+      ### change the below for loop so it doesn't use row names and is for efficient
+      for (i in 1:nrow(train_data)) {
+        index_test[[i]] <- i # puts one row in test
+        index_train[[i]] <- seq(1:nrow(test))[-i] # puts the rest in train
       }
       message("Groups not provided for inner fold partitions")
       seeds <- get_seeds_trainControl_unnested(hyperparams_list=hyperparams_list, kfold=1, cv_times=1, ncol_train=ncol(train_data), nrow_train=nrow(train_data))
@@ -151,14 +149,12 @@ create_grouped_k_multifolds <- function(resamp_method, groups, kfold = 10, cv_ti
   # for repeated cross-validation
   if(resamp_method == "repeatedcv") {
     prettyNums <- paste("Rep", gsub(" ", "0", format(1:cv_times)),
-                        sep = ""
-    )
+                        sep = "")
     for (i in 1:cv_times) {
       tmp <- caret::groupKFold(groups, k = kfold)
       names(tmp) <- paste("Fold", gsub(" ", "0", format(seq(along = tmp))),
                           ".", prettyNums[i],
-                          sep = ""
-      )
+                          sep = "")
       out <- if (i == 1) {
         tmp
       } else {

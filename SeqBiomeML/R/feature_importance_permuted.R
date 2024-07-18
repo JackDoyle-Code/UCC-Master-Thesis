@@ -4,17 +4,12 @@
 feature_importance_permuted <- function(trained_model, test_data, test_metadata,
                                         outcome_colname, perf_metric_function,
                                         perf_metric_name, performance_table, class_probs, method,
-                                        grouped_features_list = NULL, seed = NA,
-                                        nperms = 100, threads = 1) { ### consider adding performance_tbl
+                                        grouped_features_list = NULL, seed = NULL,
+                                        nperms = 100, threads = 1) { ### removed grouped_features_list argument
 
-
-
-  if (is.null(grouped_features_list)) {
-    grouped_features_list <- colnames(test_data)
-  }
-
-  test_perf_value <- performance_tbl[[perf_metric_name]][[2]] # this is the same thing as above, the 2 specifies test data
-  nsteps <- nperms * length(grouped_features_list)
+  grouped_features_list <- colnames(test_data) ### removed if grouped_features_list is null
+  test_perf_value <- performance_table[[perf_metric_name]][[2]] # this is the same as calc_perf_metric
+  nsteps <- length(grouped_features_list) ### changed nsteps so it doesn't include nperms
   #progbar <- NULL # uncomment if you do not want a progress bar
   progbar <- progressr::progressor(
     steps = nsteps,
@@ -23,22 +18,20 @@ feature_importance_permuted <- function(trained_model, test_data, test_metadata,
 
   future::plan(future::multicore, workers = threads)
   imps <- future.apply::future_lapply(grouped_features_list, function(feat) { # future lapply allows for multicore usage, lappy doesn't
-    return(
-      find_permuted_perf_metric(
-        test_data,
-        test_metadata,
-        trained_model,
-        outcome_colname,
-        perf_metric_function,
-        perf_metric_name,
-        class_probs,
-        feat,
-        test_perf_value,
-        nperms = nperms,
-        alpha = 0.05,
-        progbar = progbar
-      )
-    )
+    result <- find_permuted_perf_metric(
+      test_data,
+      test_metadata,
+      trained_model,
+      outcome_colname,
+      perf_metric_function,
+      perf_metric_name,
+      class_probs,
+      feat,
+      test_perf_value,
+      nperms = nperms,
+      alpha = 0.05)
+    pbtick(progbar) ### switched the position of progbar so it updates on every feature rather than permutation
+    return(result)
   }, future.seed = seed) %>%
     dplyr::bind_rows()
   return(as.data.frame(imps) %>%
@@ -63,8 +56,7 @@ find_permuted_perf_metric <- function(test_data, test_metadata, trained_model, o
                                       class_probs, feat,
                                       test_perf_value,
                                       nperms = 100,
-                                      alpha = 0.05,
-                                      progbar = NULL) {
+                                      alpha = 0.05) {
   test_data <- as.data.frame(test_data)
 
   # permute grouped features together
@@ -78,7 +70,6 @@ find_permuted_perf_metric <- function(test_data, test_metadata, trained_model, o
     # this strategy works for any number of features
     rows_shuffled <- sample(n_rows) # random sample of 1-nrows
     permuted_test_data[, feat] <- permuted_test_data[rows_shuffled, feat]
-    pbtick(progbar)
     return(
       calc_perf_metrics(
         permuted_test_data,

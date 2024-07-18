@@ -54,8 +54,7 @@ create_grouped_data_partition <- function(groups, group_partitions = NULL, train
   } else {
     in_train_only <- setdiff(group_partitions$train, group_partitions$test)
     in_test_only <- setdiff(group_partitions$test, group_partitions$train)
-    in_both <- intersect(group_partitions$test, group_partitions$train)
-    in_neither <- setdiff(unique_groups, union(group_partitions$test, group_partitions$train))
+    ### removed two lines in_both and in_neither (redundant)
 
     # initialize train & test sets with samples that must be in one or the other
     train_set <- indices[groups %in% in_train_only]

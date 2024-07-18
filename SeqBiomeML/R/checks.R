@@ -2,22 +2,25 @@
 #' @keywords internal
 #' @noRd
 #' Check all params that don't return a value
-check_all <- function(dataset, metadata, outcome_colname, method, preprocess_methods,
+check_all <- function(dataset, metadata, outcome_colname, method, scale_method, preprocess_methods,
                       kfold, perf_metric_function, perf_metric_name, group_colname,
                       group_partitions, seed, hyperparameters) {
 
   check_seed(seed)
   check_method(method, hyperparameters)
+  check_scale_method(scale_method)
   check_preprocess_methods(preprocess_methods)
   check_dataset(dataset)
-  check_outcome_column(metadata, outcome_colname)
-  check_outcome_value(metadata, outcome_colname)
-  check_cat_feats(dataset)
+  outcome_colname <- check_outcome_column(metadata, outcome_colname)
+  na_outcome_vals <- check_outcome_value(metadata, outcome_colname)
+  #check_cat_feats(dataset)
   check_kfold(kfold, dataset)
-  check_groups(metadata, group_colname)
+  na_group_vals <- check_groups(metadata, group_colname)
   check_group_partitions(metadata, group_colname, group_partitions)
   check_perf_metric_function(perf_metric_function)
   check_perf_metric_name(perf_metric_name)
+  na_vals <- rbind(na_outcome_vals, na_group_vals)
+  return(list(outcome_colname, na_vals))
 }
 
 
@@ -25,9 +28,9 @@ check_all <- function(dataset, metadata, outcome_colname, method, preprocess_met
 #' @inheritParams run_ml
 #' check that the seed is either NA or a number
 check_seed <- function(seed) {
-  if (!is.na(seed) & !is.numeric(seed)) {
+  if (!is.null(seed) & !is.numeric(seed)) { ### changed seed to is.null instead of is.na (null still works with seed but doesn't set a seed)
     stop(paste0(
-      "`seed` must be `NA` or numeric.\n",
+      "`seed` must be `NULL` or numeric.\n",
       "    You provided: ", seed
     ))
   }
@@ -68,12 +71,16 @@ check_dataset <- function(dataset) {
 #' @noRd
 #' Check that outcome column exists. ### Removed untrue line here
 check_outcome_column <- function(metadata, outcome_colname) { ### Removed check_values and show_message (redundant)
-  # If no outcome colname specified stop
-  if (!outcome_colname %in% colnames(metadata)) {
+  ### added an extra condition to the below if statment
+  if (!is.null(outcome_colname) && !outcome_colname %in% colnames(metadata)) {
     stop(paste0("Outcome '", outcome_colname, "' not in column names of metadata."))
   }
+  ### added the below if statement
+  if (is.null(outcome_colname)){
+    outcome_colname <- colnames(metadata)[1]
+  }
   ### Removed redundant if statements
-  check_outcome_value(metadata, outcome_colname)
+  ### removed check_outcome_value (redundant since it's already called in check_all)
   message(paste0("Using '", outcome_colname, "' as the outcome column."))
   return(outcome_colname)
 }
@@ -82,46 +89,56 @@ check_outcome_column <- function(metadata, outcome_colname) { ### Removed check_
 ### Function-6 ###
 #' @noRd
 #' Check that the outcome variable is valid. Pick outcome value if necessary.
-  check_outcome_value <- function(metadata, outcome_colname) {
-    # check no NA's
-    outcomes_vec <- metadata[[outcome_colname]] ### Replaced dplyr::pull with [[]]
-    num_missing <- sum(is.na(outcomes_vec))
-    if (num_missing != 0) {
-      stop(paste0("Missing data in the output variable is not allowed, but the outcome variable has ", num_missing, " missing value(s) (NA)."))
-    }
+check_outcome_value <- function(metadata, outcome_colname) {
+  # check no NA's
+  outcomes_vec <- metadata[[outcome_colname]] ### Replaced dplyr::pull with [[]]
+  num_missing <- sum(is.na(outcomes_vec))
+  na_ind <- NA
+  na_rows <- NA
+  if (num_missing != 0) {
+    na_ind <- which(is.na(outcomes_vec))
+    na_rows <- metadata[na_ind, ]
+    message("There are a total of ", num_missing, " row(s), which have been removed from the metadata")
+  } ### replaced stop message with the three lines above instead
 
-    # check for empty strings
-    num_empty <- sum(outcomes_vec == "")
-    if (num_empty != 0) {
-      warning(paste0("Possible missing data in the output variable: ", num_empty, " empty value(s)."))
-    }
-    # check if continuous outcome
-    isnum <- is.numeric(outcomes_vec)
-    if (isnum) {
-      # check if it might actually be categorical
-      if (all(floor(outcomes_vec) == outcomes_vec)) {
-        warning("Data is being considered numeric, but all outcome values are integers. If you meant to code your values as categorical, please use character values.")
-      }
-    }
-
-    # check binary and multiclass outcome
-    outcomes <- unique(outcomes_vec) ### removed unnecessary piping
-    num_outcomes <- length(outcomes)
-    if (num_outcomes < 2) {
-      stop(paste0("A binary or multi-class outcome variable is required, but this dataset has ",
-          num_outcomes, " outcome(s): ", paste(outcomes, collapse = ", ")))
+  ### added the below line
+  if (!is.na(na_ind)){
+    outcomes_vec <- outcomes_vec[-na_ind] # removes NA values which interrupt further checks
+  }
+  # check for empty strings
+  num_empty <- sum(outcomes_vec == "")
+  if (num_empty != 0) {
+    warning(paste0("Possible missing data in the output variable: ", num_empty, " empty value(s)."))
+  }
+  # check if continuous outcome
+  isnum <- is.numeric(outcomes_vec)
+  if (isnum) {
+    # check if it might actually be categorical
+    if (all(floor(outcomes_vec) == outcomes_vec)) {
+      warning("Data is being considered numeric, but all outcome values are integers. If you meant to code your values as categorical, please use character values.")
     }
   }
+
+  # check binary and multiclass outcome
+  outcomes <- unique(outcomes_vec) ### removed unnecessary piping
+  num_outcomes <- length(outcomes)
+  if (num_outcomes < 2) {
+    stop(paste0("A binary or multi-class outcome variable is required, but this dataset has ",
+        num_outcomes, " outcome(s): ", paste(outcomes, collapse = ", ")))
+  }
+  return(na_rows) ### added this line
+  # it returns the rows of the metadata that contained NAs
+}
 
 
 ### Function-7 ###
 #' @noRd
 #' Check if any features are categorical
-check_cat_feats <- function(dataset) {
-  if (any(sapply(dataset, class) %in% c("factor", "character"))) {
-    stop("You have categorical features in your dataset. Please check the data and apply get_caret_dummyvars_df().")
-  }
-}
+#check_cat_feats <- function(dataset) {
+#  if (any(sapply(dataset, class) %in% c("factor", "character"))) {
+#    stop("You have categorical features in your dataset. Please check the data and apply get_caret_dummyvars_df().")
+#  }
+#}
 
 
 ### Function-8 ###
@@ -166,13 +183,23 @@ check_groups <- function(metadata, group_colname) {
     # check that there are no NAs in group
     nas <- is.na(groups)
     nnas <- sum(nas)
+    na_ind <- NA
+    na_rows <- NA
+    ### adapted the below if statement similarly to how check_outcome_values was changed
     if (any(nas)) {
-      stop(paste0("No NA values are allowed in group, but ", nnas, " NA(s) are present."))
+      na_ind <- which(nas)
+      na_rows <- metadata[na_ind, ]
+      message("There are a total of ", nnas, " row(s), which have been removed from the metadata")
+    }
+    ### added the below line
+    if (!is.na(na_ind)) {
+      groups <- groups[-na_ind]
     }
     # check that there is more than 1 group
     ngrp <- length(unique(groups))
     if (ngrp < 2) {
       stop(paste0("The total number of groups should be greater than 1. If all samples are from the same group, use `group=NULL`"))
+    return(na_rows)
     }
   }
 }
@@ -187,13 +214,12 @@ check_group_partitions <- function(metadata, group_colname, group_partitions) {
   }
   groups = metadata[[group_colname]] ### replaced dplyr pull
 
-  names_unrecognized <-
-    names(group_partitions[!names(group_partitions) %in% c("train", "test")])
+  names_unrecognized <- names(group_partitions[!names(group_partitions) %in% c("train", "test")])
   if (length(names_unrecognized) > 0) {
     stop(paste("Unrecognized name(s) in `group_partitions`:",
       paste(names_unrecognized, collapse = " ")))
   }
-  groups_unrecognized <- setdiff(unlist(group_partitions), unique(groups)) %>% sort()
+  groups_unrecognized <- setdiff(unlist(group_partitions), unique(groups)) %>% sort() # checks the difference between all groups in test/train and unique(groups)
   if (length(groups_unrecognized) > 0) {
     stop(paste("`group_partitions` contains group names not in groups vector:",
       paste(groups_unrecognized, collapse = " ")))
@@ -277,8 +303,25 @@ check_training_indices <- function(training_inds, dataset) {
 #' Check preprocess methods
 check_preprocess_methods <- function(preprocess_methods) {
   if (!is.null(preprocess_methods)) {
-    if (!all((preprocess_methods %in% c("zv", "nzv", "center", "scale")))) {
+    if (!all(preprocess_methods %in% c("zv", "nzv", "center", "scale"))) {
       stop(paste0("`preprocess_methods` must be one of: NULL, 'zv', 'nzv', 'center', 'scale'. You provided ", paste0(preprocess_methods, collapse = "  ")))
+    }
+  }
+}
+
+### Function-16 ###
+#' @noRd
+#' Check scale methods
+check_scale_method <- function(scale_method) {
+  if (!is.null(scale_method)) {
+    if (!all(scale_method[[1]] %in% c("clr", "rclr", "tss", NULL))) {
+      stop(paste0("invalid scale method, must be one of: NULL, 'clr', 'rclr', 'tss'. You provided ", paste0(scale_method[[1]], collapse = "  ")))
+    }
+    if (!all(scale_method[[2]] %in% c("pseudo", "GBM", "BL", "SQ", "CZM", NULL))) {
+      stop(paste0("invalid imputation method, must be one of: NULL, 'pseudo', 'GBM', 'BL', 'SQ', 'CZM'. You provided ", paste0(scale_method[[2]], collapse = "  ")))
+    }
+    if (!as.numeric(scale_method[[3]]) | length(scale_method[[3]]) != 1) {
+      stop(paste0("imputation value must be numeric and of length 1. You provided ", paste0(scale_method[[3]], collapse = "  ")))
     }
   }
 }
