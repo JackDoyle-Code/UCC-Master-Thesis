@@ -142,19 +142,16 @@ check_outcome_value <- function(metadata, outcome_colname) {
 #}
 
 
+### changed the below function so it works for nestedcv
 ### Function-8 ###
 #' @noRd
-#' Check that kfold is an integer of reasonable size
+#' Check that kfold is an integer of reasonable size (for both n_outer_folds and n_inner_folds)
 check_kfold <- function(kfold, dataset) {
-  not_a_number <- !is.integer(kfold) & !is.numeric(kfold)
-  not_an_int <- kfold != as.integer(kfold)
-  nfeats <- ncol(dataset)
-  if (not_a_number | not_an_int | kfold <= 1) {
-    stop(paste0("`kfold` must be an integer between 1 and the number of features in the data.\n",
-      "  You provided ", kfold, " folds and your dataset has ", nfeats, " features."))
+  if (length(kfold) > 1) {
+    sapply(kfold, function(x) help_kfold(x, dataset))
   }
-  if (nrow(dataset) < 1000) {
-    warning("Sample size is < 1000 in length. Using k-fold cv may produce biased results. Consider using alternative method")
+  else {
+    help_kfold(kfold, dataset)
   }
 }
 
@@ -345,5 +342,23 @@ check_feature_importance <- function(feature_importance_method, method) {
         "    You provided: ", method
       ))
     }
+  }
+}
+
+
+### added the below function so that check_kfold works with nestedcv
+### Function-18 ###
+#' @noRd
+#' Helper function for checking valid kfold
+help_kfold <- function(kfold, dataset) {
+  not_a_number <- !is.integer(kfold) & !is.numeric(kfold)
+  not_an_int <- kfold != as.integer(kfold)
+  nfeats <- ncol(dataset)
+  if (not_a_number | not_an_int | kfold <= 1) {
+    stop(paste0("`kfold` must be an integer between 1 and the number of features in the data.\n",
+                "  You provided ", kfold, " folds and your dataset has ", nfeats, " features."))
+  }
+  if (nrow(dataset) < 1000) {
+    warning("Sample size is < 1000 in length. Using k-fold cv may produce biased results. Consider using alternative method")
   }
 }

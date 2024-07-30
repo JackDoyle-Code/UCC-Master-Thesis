@@ -109,6 +109,7 @@ run_ml_nestedcv <-
     outcome_colname = NULL,
     group_colname = NULL,
 
+    scale_method = list("clr", "pseudo", 1), ### added line
     preprocess_methods = c("zv", "nzv"), # can be c("zv", "nzv", "center", "scale")
     corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE),
     filter_features = FALSE,
@@ -132,32 +133,37 @@ run_ml_nestedcv <-
 
     jobs = 1,
     threads = 1,
-    seed = 123,
+    seed = NULL, ### changed default to NULL
     ...) {
 
 
     message("Performing various checks on datasets, metadata and supplied params")
     # Various checks
     ### @checks.R -> Function-1 and Function-12
-    check_all(
-      dataset,
-      metadata,
-      outcome_colname,
-      method,
-      preprocess_methods,
-      n_outer_folds,
-      perf_metric_function,
-      perf_metric_name,
-      group_colname,
-      group_partitions,
-      seed,
-      hyperparameters
-    )
+    check_out <- check_all(
+                  dataset,
+                  metadata,
+                  outcome_colname,
+                  method,
+                  scale_method, ### added this
+                  preprocess_methods,
+                  list(n_outer_folds, n_inner_folds), ### now checks the folds for both inner and outer
+                  perf_metric_function,
+                  perf_metric_name,
+                  group_colname,
+                  group_partitions,
+                  seed,
+                  hyperparameters,
+                  feature_importance_method ### added this
+                )
+
+    ### added below
+    # extracts check_all outputs
+    outcome_colname <- check_out[[1]]
+    na_vals <- check_out[[2]]
 
     # set seed if provided #
-    if (!is.na(seed)) {
-      set.seed(seed)
-    }
+    set.seed(seed) ### removed if statement because NULL still works with set seed
 
 
     # Check for any space in the outcome_colname of Metadata
@@ -174,26 +180,24 @@ run_ml_nestedcv <-
 
 
     # pull outcomes vector and groups vector
-    outcomes_vctr <- metadata %>% dplyr::pull(outcome_colname)
+    outcomes_vctr <- metadata[[outcome_colname]] ### replaced dplyr pull
     if (is.null(group_colname)) {
       groups <- NULL
     } else {
-      groups <- metadata %>% dplyr::pull(group_colname)
+      groups <- metadata[[group_colname]] ### replaced dplyr pull
     }
 
 
-    # At this stage implement feature preprocessing
-    ### @preprocess_features.R -> Function-1 to function-9
-    message("Performing preprocessing of dataset.")
-    filt_dataset <- preprocess_features(
-      train_data = dataset,
-      train_metadata = metadata,
-      outcome_colname = outcome_colname,
-      preprocess_methods = preprocess_methods,
-      corrFunList = corrFunList)
-    dataset = filt_dataset[[1]]
-    metadata = filt_dataset[[2]]
-    grouped_feat = filt_dataset[[4]]
+    # Sample preprocessing is implemented prior to data partition
+    ### @preprocess_samples.R -> Function-1 to function-2
+    dataset <- preprocess_samples(dataset = dataset,
+                                  scale_method = scale_method)
+
+
+    # Get type of predicting variable
+    ### @performance.R -> Function-1
+    outcome_type <- get_outcome_type(outcomes_vctr)
+    class_probs <- outcome_type != "continuous"
 
 
     # Get indices to split dataset into train
@@ -235,7 +239,10 @@ run_ml_nestedcv <-
         metadata = metadata,
         groups = groups,
         method = method,
-        outcomes_vctr = outcomes_vctr,
+        preprocess_methods = preprocess_methods,
+        corrFunList = corrFunList,
+        outcome_type = outcome_type,
+        class_probs = class_probs,
         outcome_colname = outcome_colname,
 
         out_fold = out_fold,
@@ -244,6 +251,7 @@ run_ml_nestedcv <-
         hyperparameters = hyperparameters,
         resamp_method = resamp_method,
         perf_metric_name = perf_metric_name,
+        perf_metric_function = perf_metric_function,
         n_inner_folds = n_inner_folds,
         cv_times = cv_times,
 
@@ -265,15 +273,10 @@ run_ml_nestedcv <-
       dplyr::bind_rows() %>%
       dplyr::mutate("Fold" = paste0("Fold", row.names(.))) %>%
       tibble::column_to_rownames("Fold")
-    finalTune <- finaliseTune(bestTunes)
-    message("Final tuned parameters are...")
+    finalTune <- finaliseTune(bestTunes) # selects the optimal hyperparameters
+    message("Final tuned parameter(s) are...")
     print(finalTune, digits = 2L, print.gap = 2L, row.names = FALSE)
 
-
-    # Get type of predicting variable
-    ### @performance.R -> Function-1
-    outcome_type <- get_outcome_type(outcomes_vctr)
-    class_probs <- outcome_type != "continuous"
 
     # Fit final single model using optimized parameters
     fitControl <- caret::trainControl(

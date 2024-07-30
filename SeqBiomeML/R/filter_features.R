@@ -8,7 +8,7 @@ filter_features_main <- function(
   train_data, train_metadata, test_data, outcome_colname,
   filterFunList = list(test = "wilcoxon_filter", p_cutoff=0.05), outcome_type) {
 
-  # remove features based on significance test
+  # remove features using specific feature selection methods
   args <- list(y = train_metadata[[outcome_colname]], x = train_data) ### replaced pull
   if (filterFunList[["test"]] == "glm_filter") {
     args <- append(args, outcome_type)
