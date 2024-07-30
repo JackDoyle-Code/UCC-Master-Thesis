@@ -5,24 +5,26 @@
 #'
 #'
 filter_features_main <- function(
-  train_data, train_metadata, outcome_colname,
-  filterFunList = list(test = "wilcoxon_filter", p_cutoff=0.05),
-  grouped_feat) {
+  train_data, train_metadata, test_data, outcome_colname,
+  filterFunList = list(test = "wilcoxon_filter", p_cutoff=0.05), outcome_type) {
 
   # remove features based on significance test
   args <- list(y = train_metadata[[outcome_colname]], x = train_data) ### replaced pull
+  if (filterFunList[["test"]] == "glm_filter") {
+    args <- append(args, outcome_type)
+  }
   args <- append(args, filterFunList[!names(filterFunList) %in% "test"]) # using filterFunList returns 0.05 and not $p_cutoff 0.05
   fset <- do.call(filterFunList[["test"]], args) # calls the function (either wilcoxon/ttest)
   filt_xtrain <- train_data[, fset]
-  final_feat <- colnames(train_data[, fset])
+  filt_xtest <- test_data[, fset]
+  rem_feat <- colnames(train_data[, -fset])
 
   message("Out of a total of N=", ncol(train_data), " predictors, N=", ncol(filt_xtrain), " could be retained after ", filterFunList[["test"]], " filtering")
   # return now
   return(list(
-    filt_data = filt_xtrain,
-    filt_metadata = train_metadata,
-    final_feat = final_feat,
-    grouped_feat = grouped_feat
+    filt_traindata = filt_xtrain,
+    filt_testdata = filt_xtest,
+    rem_feat = rem_feat
   ))
 }
 
@@ -136,4 +138,85 @@ index_factor <- function(x, convert_bin = FALSE) {
     num_ind <- unlist(lapply(x, is.numeric))
   }
   !num_ind
+}
+
+
+#' Function-7
+#' @noRd
+#' feature selection using LASSO
+glm_filter <- function(y, x, n = 100, cv_method = list(method = "cv", times = 10 , repeats = NA), outcome_type = "binary") {
+  family = switch(outcome_type,
+                   "continuous" = "gaussian",
+                   "binary" = "binomial",
+                   "multiclass" = "multinomial",
+                   "unknown")
+  model = train(x, y,
+                method = "glmnet",
+                family = family,
+                trControl = trainControl(method = cv_method[[1]],
+                                         number = cv_method[[2]],
+                                         repeats = cv_method[[3]]),
+                tuneGrid = expand.grid(alpha = c(1),
+                                       lambda = seq(0.1, 1, by = 0.01)))
+  best_lambda = model$bestTune$lambda
+  best_alpha = model$bestTune$alpha
+  best_model = glmnet(x, y, family = family, alpha = best_alpha, lambda = best_lambda)
+  co_ef = coef(best_model)
+  ord_coef = as.matrix(co_ef[order(abs(co_ef), decreasing = T),])
+  ord_feat = rownames(ord_coef)
+  final_feats = ord_feat[ord_feat != "(Intercept)"]
+  N_feats = head(final_feats, n)
+  feat_ind = which(colnames(x) %in% N_feats)
+  return(feat_ind)
+}
+
+
+#' Function-8
+#' @noRd
+#' feature selection using Boruta
+boruta_filter <- function(y, x, n = 100, maxRuns = 100) { # getImp can be normalised permutation, raw permutation or gini impurity. Higher value for MaxRuns will likely reduce tentative features
+  stats = Boruta(x, as.factor(y), maxRuns = maxRuns)
+  if (!is.null(n)) {
+    imp = attStats(stats)
+    ord_imp = imp[order(imp$meanImp, decreasing = T),]
+    feats = head(rownames(ord_imp), n)
+  }
+  else {
+    non_rej = stats$finalDecision[stats$finalDecision != "Rejected"]
+    feats = rownames(as.matrix(non_rej))
+  }
+  feat_ind = which(colnames(x) %in% feats)
+  return(feat_ind)
+}
+
+
+#' Function-9
+#' @noRd
+#' feature selection using RFE-SVM
+rfe_filter <- function(y, x, cv_method = list(method = "cv", times = 10 , repeats = NA)) {
+  mx = ncol(x)
+  ctrl = rfeControl(functions = caretFuncs,
+                    method = cv_method[[1]],
+                    number = cv_method[[2]],
+                    repeats = cv_method[[3]])
+  svm_feats = rfe(x = x,
+                  y = as.factor(y),
+                  rfeControl = ctrl,
+                  sizes = c(0.1*mx, 0.25*mx, 0.5*mx, 0.75*mx),
+                  method = "svmRadial")
+  final_features = svm_feats$optVariables
+  feat_ind = which(colnames(x) %in% final_features)
+  return(feat_ind)
+}
+
+
+#' Function-10
+#' @noRd
+#' feature selection using mRMR
+mrmr_filter <- function(y, x, n = 100) {
+  fact = as.numeric(as.factor(y)) - 1
+  data = mRMR.data(cbind(x, fact))
+  mrmr = mRMR.classic(data = data, target_indices = (ncol(x) + 1), feature_count = n)
+  feats = mrmr@filters[[1]]
+  return(as.vector(feats))
 }

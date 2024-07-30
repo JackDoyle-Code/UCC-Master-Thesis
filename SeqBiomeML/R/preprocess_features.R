@@ -31,10 +31,23 @@ preprocess_features <- function(
       message("None of the predictors could be grouped")
     }
 
+  ### added the below code
+  # removing grouped columns and nzv/zv columns from test_data
+  test_data = preprocess_data[[2]]
+  grp_ind = grep("grp", grouped_feat$feat_group) # gets the indices of the grp columns
+  grp_rows = grouped_feat[grp_ind, ] # gets the rows of just the grp columns
+  if (length(grp_rows) != 0) {
+    split = apply(grp_rows, 1, function(x) strsplit(x[2], "\\|")[[1]][1]) # identifies the columns that represent the grps
+    col_ind = which(colnames(test_data) %in% split) # gets the indices of the colnames in the test_data
+    names(test_data)[col_ind] = as.vector(grp_rows$feat_group) # replaces the representative column with grp n
+    ind = which(colnames(test_data) %in% colnames(train_data[[1]])) # selects columns in train_data
+    test_data = test_data[, ind]
+  }
+
   # return now
   return(list(
     filt_train_data = train_data[[1]],
-    filt_test_data = preprocess_data[[2]],
+    filt_test_data = test_data,
     rem_feat = preprocess_data[[3]], ### removed colnames(train_data[[1]]) and filt_metadata, added rem_feat
     grouped_feat = grouped_feat
   ))

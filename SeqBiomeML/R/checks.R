@@ -4,7 +4,7 @@
 #' Check all params that don't return a value
 check_all <- function(dataset, metadata, outcome_colname, method, scale_method, preprocess_methods,
                       kfold, perf_metric_function, perf_metric_name, group_colname,
-                      group_partitions, seed, hyperparameters) {
+                      group_partitions, seed, hyperparameters, feature_importance_method) {
 
   check_seed(seed)
   check_method(method, hyperparameters)
@@ -19,6 +19,7 @@ check_all <- function(dataset, metadata, outcome_colname, method, scale_method, 
   check_group_partitions(metadata, group_colname, group_partitions)
   check_perf_metric_function(perf_metric_function)
   check_perf_metric_name(perf_metric_name)
+  check_feature_importance(feature_importance_method, method)
   na_vals <- rbind(na_outcome_vals, na_group_vals)
   return(list(outcome_colname, na_vals))
 }
@@ -41,7 +42,7 @@ check_seed <- function(seed) {
 #' @noRd
 #' Check if the method is supported. If not, throws error.
 check_method <- function(method, hyperparameters) {
-  methods <- c("glmnet", "svmRadial", "rpart2", "rf", "customrf", "xgbTree")
+  methods <- c("glmnet", "svmRadial", "rpart2", "rf", "customrf", "xgbTree", "kknn") ### added kknn
   if (!(method %in% methods) & is.null(hyperparameters)) {
     stop(paste0("Method ", method, " is not supported!!! "
     ))
@@ -314,14 +315,35 @@ check_preprocess_methods <- function(preprocess_methods) {
 #' Check scale methods
 check_scale_method <- function(scale_method) {
   if (!is.null(scale_method)) {
-    if (!all(scale_method[[1]] %in% c("clr", "rclr", "tss", NULL))) {
+    if (!all(scale_method[[1]] %in% c("clr", "rclr", "tss", NA))) {
       stop(paste0("invalid scale method, must be one of: NULL, 'clr', 'rclr', 'tss'. You provided ", paste0(scale_method[[1]], collapse = "  ")))
     }
-    if (!all(scale_method[[2]] %in% c("pseudo", "GBM", "BL", "SQ", "CZM", NULL))) {
+    if (!all(scale_method[[2]] %in% c("pseudo", "GBM", "BL", "SQ", "CZM", NA))) {
       stop(paste0("invalid imputation method, must be one of: NULL, 'pseudo', 'GBM', 'BL', 'SQ', 'CZM'. You provided ", paste0(scale_method[[2]], collapse = "  ")))
     }
-    if (!as.numeric(scale_method[[3]]) | length(scale_method[[3]]) != 1) {
-      stop(paste0("imputation value must be numeric and of length 1. You provided ", paste0(scale_method[[3]], collapse = "  ")))
+    if (!scale_method[[3]] == "min" && !as.numeric(scale_method[[3]]) | length(scale_method[[3]]) != 1) {
+      stop(paste0("imputation value must be 'min' or numeric and of length 1. You provided ", paste0(scale_method[[3]], collapse = "  ")))
+    }
+  }
+}
+
+
+### Function-17 ###
+#' @noRd
+#' Check feature importance methods
+check_feature_importance <- function(feature_importance_method, method) {
+  if (!feature_importance_method %in% c("permutation", "embedded")) {
+    stop(paste0(
+      "Feature Importance method must be either permutation or embedded",
+      "    You provided: ", feature_importance_method
+    ))
+  }
+  if (feature_importance_method == "embedded") {
+    if (!method %in% c("glmnet", "rpart2", "xgbTree", "rf")) {
+      stop(paste0(
+        "Embedded feature importance is only compatible with the following models: glmnet, rpart2, xgbTree, rf",
+        "    You provided: ", method
+      ))
     }
   }
 }
