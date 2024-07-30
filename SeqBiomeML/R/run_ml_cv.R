@@ -241,7 +241,7 @@ run_ml_cv <-
     train_data = filt_dataset[[1]]
     ### removed metadata = filt_dataset[[2]] (redundant)
     test_data = filt_dataset[[2]] ### added this line
-    rem_feat = filt_dataset[[3]] # removed by preprocessing (e.g. nzv) ### added this line
+    nzv_feat = filt_dataset[[3]] # removed by preprocessing (e.g. nzv) ### added this line
     grouped_feat = filt_dataset[[4]] # correlated features
 
 
@@ -264,6 +264,8 @@ run_ml_cv <-
       train_data = filt_dataset[[1]]
       test_data = filt_dataset[[2]]
       rem_feat = filt_dataset[[3]]
+      filt_dataset[[3]] = c(filt_dataset[[3]], nzv_feat)
+      filt_dataset[["Grouped_Features"]] = grouped_feat
     }
 
 

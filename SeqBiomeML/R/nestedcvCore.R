@@ -6,7 +6,10 @@ nestedcvCore <- function(
   metadata,
   groups,
   method,
-  outcomes_vctr,
+  preprocess_methods,
+  corrFunList,
+  outcome_type,
+  class_probs,
   outcome_colname,
 
   out_fold,
@@ -15,6 +18,7 @@ nestedcvCore <- function(
   hyperparameters,
   resamp_method,
   perf_metric_name,
+  perf_metric_function,
   n_inner_folds,
   cv_times,
 
@@ -31,15 +35,49 @@ nestedcvCore <- function(
   message_parallel("Starting ", out_fold, " ...")
 
   # Get the data, metadata and groups for inner fold
-  tmp_data <- dataset[outer_folds[[out_fold]], ]
-  tmp_metadata <- metadata[outer_folds[[out_fold]], ]
+  tmp_train_data <- dataset[outer_folds[[out_fold]], ]
+  tmp_test_data <- dataset[-outer_folds[[out_fold]], ]
+  tmp_train_metadata <- metadata[outer_folds[[out_fold]], ]
+  tmp_test_metadata <- metadata[-outer_folds[[out_fold]], ]
   tmp_groups <- groups[outer_folds[[out_fold]]]
+
+  ### added this line
+  # At this stage implement feature preprocessing
+  ### @preprocess_features.R -> Function-1 to function-9
+  message("Performing preprocessing of dataset.")
+  filt_dataset <- preprocess_features(train_data = tmp_train_data,
+                                      test_data = tmp_test_data,
+                                      outcome_colname = outcome_colname,
+                                      preprocess_methods = preprocess_methods,
+                                      corrFunList = corrFunList)
+  tmp_train_data  = filt_dataset[[1]] ### removed metadata = filt_dataset[[2]] (redundant)
+  tmp_test_data = filt_dataset[[2]]
+  nzv_feat = filt_dataset[[3]] # removed by preprocessing
+  grouped_feat = filt_dataset[[4]] # correlated features
+
+
+  # At this stage implement feature selection
+  ### @filter_features.R -> Function-1 to function-6
+  if (filter_features) {
+    message("Performing feature selection.")
+    filt_dataset <- filter_features_main(train_data = tmp_train_data,
+                                         train_metadata = tmp_train_metadata,
+                                         test_data = tmp_test_data,
+                                         outcome_colname = outcome_colname,
+                                         filterFunList = filterFunList,
+                                         outcome_type = outcome_type)
+    tmp_train_data = filt_dataset[[1]]
+    tmp_test_data = filt_dataset[[2]]
+    rem_feat = filt_dataset[[3]]
+    filt_dataset[[3]] = c(filt_dataset[[3]], nzv_feat)
+    filt_dataset[["Grouped_Features"]] = grouped_feat
+  }
 
 
   # Set hyper-parameter and tun-grid
   ### @hyperparameters.R -> Function-1 to Function-8
   if (is.null(hyperparameters) & !grepl("custom", method)) {
-    hyperparameters <- get_hyperparams_list(tmp_data, method)
+    hyperparameters <- get_hyperparams_list(tmp_train_data, method)
     tune_grid <- get_tuning_grid(hyperparameters, method)
   } else if (!is.null(hyperparameters) & !grepl("custom", method)) {
     tune_grid <- get_tuning_grid(hyperparameters, method)
@@ -48,11 +86,6 @@ nestedcvCore <- function(
     customrf_param = custom_method_grid(method = method)
   }
 
-
-  # Get type of predicting variable
-  ### @performance.R -> Function-1
-  outcome_type <- get_outcome_type(outcomes_vctr)
-  class_probs <- outcome_type != "continuous"
 
   # Get performance metric function
   ### @performance.R -> Function-2 and Function-3
@@ -66,35 +99,12 @@ nestedcvCore <- function(
   }
 
 
-  # At this stage implement feature selection
-  ### @filter_features.R -> Function-1 to function-6
-  if (filter_features) {
-    filt_dataset <- filter_features_main(
-      train_data = tmp_data,
-      train_metadata = tmp_metadata,
-      outcome_colname = outcome_colname,
-      filterFunList = filterFunList,
-      grouped_feat = grouped_feat)
-    tmp_data = filt_dataset[[1]]
-    tmp_metadata = filt_dataset[[2]]
-  } else {
-    filt_dataset <- list(
-      dataset = tmp_data,
-      metadata = tmp_metadata,
-      final_feat = colnames(tmp_data),
-      grouped_feat = grouped_feat
-    )
-    tmp_data = filt_dataset[[1]]
-    tmp_metadata = filt_dataset[[2]]
-  }
-
-
   # Define cross-validation scheme and training parameters
   ### @cross_val.R -> Function-1 to Function-4
   cross_val <- define_cv_nested(
     resamp_method = resamp_method,
-    train_data = tmp_data,
-    train_metadata = tmp_metadata,
+    train_data = tmp_train_data,
+    train_metadata = tmp_train_metadata,
     outcome_colname = outcome_colname,
     hyperparams_list = hyperparameters,
     perf_metric_function = perf_metric_function,
@@ -105,14 +115,14 @@ nestedcvCore <- function(
     seed = seed
   )
 
-
+  message("Training the model...")
   # Train model now
   ### @train.R -> Function-1
   doFuture::registerDoFuture()
   future::plan(future::multicore, workers = threads)
   trained_model_caret <- train_model(
-    train_data = tmp_data,
-    train_metadata = tmp_metadata,
+    train_data = tmp_train_data,
+    train_metadata = tmp_train_metadata,
     outcome_colname = outcome_colname,
     method = method,
     cv = cross_val,
@@ -120,14 +130,14 @@ nestedcvCore <- function(
     tune_grid = tune_grid
   )
 
-
+  message("Calculating performance of test dataset.")
   # Calculate performance of the model on validation data
   ### @performance.R -> Function-4 and Function-5
   ### @utils.R -> Function-4
   performance_tbl <- get_performance_tbl(
     trained_model = trained_model_caret,
-    test_data = dataset[-outer_folds[[out_fold]], filt_dataset[[3]]],
-    test_metadata = metadata[-outer_folds[[out_fold]], ],
+    test_data = tmp_test_data,
+    test_metadata = tmp_test_metadata,
     outcome_colname = outcome_colname,
     perf_metric_function = perf_metric_function,
     perf_metric_name = perf_metric_name,
@@ -140,12 +150,13 @@ nestedcvCore <- function(
   message("Plotting ROC curve.")
   # Plot ROC curve
   ### @plot.R -> Function-1 and Function-2
-  roc_out = roc_plot_main(
+  plot_out = plot_main(
     trained_model = trained_model_caret,
-    test_data = dataset[-outer_folds[[out_fold]], filt_dataset[[3]]],
-    test_metadata = metadata[-outer_folds[[out_fold]], ],
+    test_data = tmp_test_data,
+    test_metadata = tmp_test_metadata,
     outcome_colname = outcome_colname,
-    method = method)
+    method = method,
+    outcome_type = outcome_type)
 
     toc = Sys.time()
     message_parallel("Finished ", out_fold, " (", format(toc - tic, digits = 3), ")")
@@ -155,12 +166,12 @@ nestedcvCore <- function(
     return(
       list(
         "dataset" = filt_dataset,
-        "test_data" = dataset[-outer_folds[[out_fold]], filt_dataset[[3]]],
-        "test_metadata" = metadata[-outer_folds[[out_fold]], ],
+        "test_data" = tmp_test_data,
+        "test_metadata" = tmp_test_metadata,
         "cross_val" = cross_val,
         "trained_model" = trained_model_caret,
         "performance" = performance_tbl,
-        "roc_plot" = roc_out
+        "roc_plot" = plot_out
       )
     )
   }
