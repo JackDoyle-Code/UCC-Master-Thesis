@@ -5,12 +5,13 @@ get_hyperparams_list <- function(dataset, method) {
   n_features <- ncol(dataset)
   n_samples <- nrow(dataset)
   hparams_functions <- list(
-    glmnet = rlang::quo(set_hparams_glmnet()),
+    glmnet = rlang::quo(set_hparams_glmnet(n_samples, n_features)),
     rf = rlang::quo(set_hparams_rf(n_features)),
     parRF = rlang::quo(set_hparams_rf(n_features)),
     rpart2 = rlang::quo(set_hparams_rpart2(n_samples)),
     svmRadial = rlang::quo(set_hparams_svmRadial()),
-    xgbTree = rlang::quo(set_hparams_xgbTree(n_samples))
+    xgbTree = rlang::quo(set_hparams_xgbTree(n_samples)),
+    kknn = rlang::quo(set_hparams_knn(n_samples))
   )
   ### removed if statement here (redundant)
   return(rlang::eval_tidy(hparams_functions[[method]]))
@@ -20,10 +21,17 @@ get_hyperparams_list <- function(dataset, method) {
 ### Function-2 ###
 #' @noRd
 #' Set hyperparameters for regression models for use with glmnet
-set_hparams_glmnet <- function() {
+set_hparams_glmnet <- function(n_samples, n_features) {
+
+  log_lambda = seq(log(0.01), log(10), length.out = 100)
+  lambda = exp(log_lambda)
+  if (n_features > n_samples){
+    log_lambda = seq(log(0.0001), log(10), length.out = 100)
+    lambda = exp(log_lambda)
+  }
   return(list(
-    lambda = 10^seq(-4, 1, 1),
-    alpha = 0 # this makes it ridge (i.e. L2). 1 would make it lasso (i.e. L1).
+    lambda = lambda, # lambda regulates the strength of the penalty
+    alpha = seq(0, 1, length.out = 5) # this makes it ridge (i.e. L2). 1 would make it lasso (i.e. L1), decimal (e.g. 0.5) is a mix of the two.
   ))
 }
 
@@ -61,7 +69,7 @@ set_hparams_rpart2 <- function(n_samples) {
 #' Set hyperparameters for SVM with radial kernel
 set_hparams_svmRadial <- function() {
   return(list(
-    C = 10^seq(-3, 2, 1),
+    C = 10^seq(-3, 3, 1),
     sigma = 10^seq(-6, -1, 1)
   ))
 }
@@ -82,8 +90,19 @@ set_hparams_xgbTree <- function(n_samples) {
   ))
 }
 
-
 ### Function-7 ###
+#' @noRd
+#' Set hyperparameters for kknn
+set_hparams_knn <- function(n_samples) {
+  return(list(
+    kmax = k_num(n_samples),
+    distance = c(1, 2), # 1 = euclidean, 2 = manhattan
+    kernel = c("rectangular", "triangular", "gaussian")
+  ))
+}
+
+
+### Function-8 ###
 #' @noRd
 #' Generate the tuning grid for tuning hyperparameters
 get_tuning_grid <- function(hyperparams_list, method) {
@@ -93,7 +112,7 @@ get_tuning_grid <- function(hyperparams_list, method) {
 }
 
 
-### Function-8 ###
+### Function-9 ###
 #' @noRd
 #' Custom functions to set a tuning with multiple param
 custom_method_grid <- function(method) {
@@ -169,3 +188,14 @@ custom_method_grid <- function(method) {
     }
     return(modelInfo)
   }
+
+
+### Function-10 ###
+#' @noRd
+#' Determines the sequence of values for k
+k_num <- function(x) {
+  max = floor(sqrt(x))
+  seq10 = floor(seq(1, max, length.out = 10))
+  rem_even = ifelse(seq10 %% 2 == 0, seq10 - 1, seq10) # if values are even -1
+  out = unique(rem_even)
+}

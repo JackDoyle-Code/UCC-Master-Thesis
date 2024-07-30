@@ -147,7 +147,8 @@ run_ml_cv <-
                   group_colname,
                   group_partitions,
                   seed,
-                  hyperparameters
+                  hyperparameters,
+                  feature_importance_method
                 )
 
     # extracts check_all outputs
@@ -244,17 +245,25 @@ run_ml_cv <-
     grouped_feat = filt_dataset[[4]] # correlated features
 
 
+    # Get type of predicting variable
+    ### @performance.R -> Function-1
+    outcome_type <- get_outcome_type(outcomes_vctr) # checks if outcome type is continous/binary/multiclass
+    class_probs <- outcome_type != "continuous"
+
+
     # At this stage implement feature selection
     ### @filter_features.R -> Function-1 to function-6
     if (filter_features) {
-      message("Performing feature filtering.")
+      message("Performing feature selection.")
       filt_dataset <- filter_features_main(train_data = train_data,
                                            train_metadata = train_metadata,
+                                           test_data = test_data,
                                            outcome_colname = outcome_colname,
                                            filterFunList = filterFunList,
-                                           grouped_feat = grouped_feat)
+                                           outcome_type = outcome_type)
       train_data = filt_dataset[[1]]
-      train_metadata = filt_dataset[[2]]
+      test_data = filt_dataset[[2]]
+      rem_feat = filt_dataset[[3]]
     }
 
 
@@ -262,7 +271,7 @@ run_ml_cv <-
     # Set hyper-parameter and tun-grid
     ### @hyperparameters.R -> Function-1 to Function-8
     if (is.null(hyperparameters) & !grepl("custom", method)) {
-      hyperparameters <- get_hyperparams_list(dataset, method)
+      hyperparameters <- get_hyperparams_list(train_data, method)
       tune_grid <- get_tuning_grid(hyperparameters, method) # produces a matrix of all possible combinations of parameters
     }
     else if (!is.null(hyperparameters) & !grepl("custom", method)) {
@@ -273,11 +282,6 @@ run_ml_cv <-
       customrf_param = custom_method_grid(method = method)
     }
 
-
-    # Get type of predicting variable
-    ### @performance.R -> Function-1
-    outcome_type <- get_outcome_type(outcomes_vctr) # checks if outcome type is continous/binary/multiclass
-    class_probs <- outcome_type != "continuous"
 
     # Get performance metric function
     ### @performance.R -> Function-2 and Function-3
@@ -354,12 +358,13 @@ run_ml_cv <-
     message("Plotting ROC curve.")
     # Plot ROC curve
     ### @plot.R -> Function-1 and Function-2
-    roc_out = roc_plot_main(
+    plot_out = plot_main(
       trained_model = trained_model_caret,
       test_data = test_data,
       test_metadata = test_metadata,
       outcome_colname = outcome_colname,
-      method = method)
+      method = method,
+      outcome_type = outcome_type)
 
 
     # Feature importance analysis
@@ -428,7 +433,7 @@ run_ml_cv <-
           "cross_val" = cross_val,
           "trained_model" = trained_model_caret,
           "performance" = performance_tbl,
-          "roc_plot" = roc_out,
+          "roc_plot" = plot_out,
           "feature_importance" = feat_imp
         )
     )

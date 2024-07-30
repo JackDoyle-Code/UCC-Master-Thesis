@@ -8,8 +8,8 @@ preprocess_samples <- function(
     dataset = dataset,
     scale_method = list(method = c("clr", "tss", "rclr"), impute_method = "pseudo", val = 1)) {
 
-  # imputes zeros if the impute_method is not NULL
-  if (!is.null(scale_method[[2]])){
+  # imputes zeros if the impute_method is not NA
+  if (!is.na(scale_method[[2]])){
     dataset <- impute_zeros(dataset, scale_method)
   }
 
@@ -43,9 +43,11 @@ preprocess_samples <- function(
 #' imputes zero values within the count data for CLR transformation
 impute_zeros <- function(dataset, scale_method) {
   if (scale_method[[2]] == "pseudo") {
-    val = as.numeric(scale_method[[3]])
-    if (val == "min") {
+    if (scale_method[[3]] == "min") {
       val = min(dataset[dataset != 0])*0.65 # applies 0.65 * detection limit (i.e. smallest observed value)
+    }
+    else {
+      val = as.numeric(scale_method[[3]])
     }
     dataset + val
   }
