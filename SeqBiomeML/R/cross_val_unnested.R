@@ -11,8 +11,7 @@ define_cv_unnested <- function(resamp_method, train_data, train_metadata, outcom
       cvIndex <- create_grouped_k_multifolds(
         resamp_method,
         groups,
-        kfold = kfold,
-        cv_times = cv_times
+        kfold = kfold ### removed cv_times argument as it is redundant
       )
       message("Groups will be kept together in CV partitions")
     }
@@ -137,7 +136,7 @@ keep_groups_in_cv_partitions <- function(groups, group_partitions, kfold) {
 ### Function-3 ###
 #' @noRd
 #' Splitting into folds for cross-validation when using groups
-create_grouped_k_multifolds <- function(resamp_method, groups, kfold = 10, cv_times = 5) {
+create_grouped_k_multifolds <- function(resamp_method, groups, kfold = 10, cv_times = 0) {
   # for cross-validation
   if(resamp_method == "cv") {
     out <- caret::groupKFold(groups, k = kfold)

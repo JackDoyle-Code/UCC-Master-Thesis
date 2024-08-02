@@ -186,6 +186,13 @@ run_ml_cv <-
     dataset <- preprocess_samples(dataset = dataset,
                                   scale_method = scale_method)
 
+
+    # Check that training fractions falls within range of dataset
+    ### @checks.R -> Function-13
+    ### @utils.R -> Function-2
+    check_training_frac(training_frac)
+
+
     message("Creating data partition.")
     # Get indices to split dataset into train
     ### @partition.R -> Function-1 and Function-2
@@ -211,10 +218,9 @@ run_ml_cv <-
     }
 
 
-    # Check that training fractions and training indices falls within range of dataset
-    ### @checks.R -> Function-13 and Function-14
+    # Check that training indices falls within range of dataset
+    ### @checks.R -> Function-14
     ### @utils.R -> Function-2
-    check_training_frac(training_frac)
     check_training_indices(training_inds, dataset)
 
     # Get train and test data
@@ -440,3 +446,4 @@ run_ml_cv <-
         )
     )
   }
+

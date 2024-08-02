@@ -142,19 +142,20 @@ feature_importance_main <- function(feature_importance_method, trained_model, te
                         grouped_features_list = NULL, seed = NULL,
                         nperms = 100, threads = 1) {
 
-  if (feature_importance_method == "permutation") {
+  feature_importance = list()
+  if ("permutation" %in% feature_importance_method) {
     message("Performing feature importance analysis using permutation")
     # Feature importance analysis and plot
     ### @feature_importance.R -> Function-1
-    feat_imp <- with_progress(feature_importance_permuted(
+    feature_importance[["Permutation"]] <- with_progress(feature_importance_permuted(
       trained_model, test_data, test_metadata, outcome_colname, perf_metric_function, perf_metric_name, performance_tbl,
       class_probs, method, grouped_features_list, seed, nperms, threads))
   }
-  if (feature_importance_method == "embedded") {
+  if ("embedded" %in% feature_importance_method) {
     message("Performing feature importance analysis using embedded methods")
-    feat_imp <- feature_importance_embedded(trained_model, feature_importnace_method, test_data)
+    feature_importance[["Embedded"]] <- feature_importance_embedded(trained_model, feature_importnace_method, test_data)
   }
-  return(feat_imp)
+  return(feature_importance)
 }
 
 
@@ -172,4 +173,5 @@ feature_importance_embedded <- function(trained_model, feature_importnace_method
     imp$Variable = rownames(imp)
     feat_imp = imp[order(imp$Overall, decreasing = T), ]
   }
+  return(feat_imp)
 }
