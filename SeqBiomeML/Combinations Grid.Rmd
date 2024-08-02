@@ -1,0 +1,134 @@
+---
+title: "Iterations"
+author: "Jack Doyle"
+date: "2024-07-31"
+output: html_document
+---
+
+```{r}
+# Don't use correlation with feature selection for the moment
+# look up info about cv
+# look up a correlation value
+# don't use clr without imputation, don't use rclr with imputation, don't use zComp with val
+# don't use nzv and zv together, use center scale together
+# n, maxRuns and cv_method subject to change
+
+# Define variables
+dataset = list(comp_data)
+metadata = list(con_ath)
+method = c("rf", "kknn", "glmnet", "svm") # rpart2 and xgbTree can be included
+outcome_colname = "ParticipantType"
+#group_colname = "SubjectID"
+
+### Preprocessing
+scale_method = c("clr", "tss", "rclr", NULL)
+impute_method = c("pseudo", 'CZM', NULL) # GBM, BL and SQ can be included
+val = c(1, "min")
+preprocess_methods = c("nzv", list(c("center","scale")), list(c("nzv", "center", "scale")))
+# can include zv on its own and inconjuction with others
+#corr_thresh = c(0.95) # should ask shriram for conformation # using 0.95 as it is stringent and still removes a significant proportion of features (~77%)
+
+### Feature selection
+filter_features = c(T, F)
+fs_method = c("mrmr_filter", "boruta_filter", "glm_filter", "rfe_filter") 
+# can include ttest_filter and wilcoxon_filter
+#n = c(50, 100, 300)
+#maxRuns = c(100) # 100, 300, 500 all returned the same top 100 features
+#cv_method = c("repeatedcv") # can be cv or loocv as well but repeatedcv reduces variance and bias the most
+#times = c(10)
+#repeats = c(10)
+
+### Cross-Validation
+#resamp_method = c("repeatedcv")
+#n_outer_folds = 10
+#n_inner_folds = 10
+#cv_times = 10
+
+### etc
+#class_weight = c(T)
+#feature_importance_method = c("permutation", "embedded")
+```
+
+
+```{r}
+# Define combinations
+combinations <- expand.grid(
+  dataset = dataset,
+  metadata = metadata,
+  outcome_colname = outcome_colname,
+  #group_colname = group_colname,
+  method = method,
+  scale_method = scale_method,
+  impute_method = impute_method,
+  val = val,
+  preprocess_methods = preprocess_methods,
+  filter_features = filter_features,
+  fs_method = fs_method
+  #feature_importance_method = feature_importance_method 
+)
+```
+
+
+```{r}
+# remove variables that are not compatible with each other
+apply_conditions <- function(cb_grid) {
+  # removes rows that use clr with null imputation method
+  out <- cb_grid[!(cb_grid$scale_method == "clr" & is.null(cb_grid$impute_method)), ]
+  # removes rows that use rclr with imputation methods other than null
+  out <- out[!(out$scale_method == "rclr" & !is.null(out$impute_method)), ]
+  # removes rows that don't use pseudo and use min or 1
+  out <- out[!(out$impute_method != "pseudo" & (out$val == "min" | out$val == 1)), ]
+  return(out)
+}
+```
+
+
+```{r}
+# iterate through each set of variables in the combination grid and runs the ML pipeline on them
+pipeline_iteration <- function(cb_grid) {
+  out <- apply(cb_grid, 1, function(x) 
+    run_ml_cv(
+      dataset = x$dataset,
+      metadata = x$metadata,
+      method = x$method,
+      outcome_colname = x$outcome_colname,
+      group_colname = x$group_colname,
+      scale_method = list(x$scale_method, x$impute_method, x$val),
+      preprocess_methods = x$preprocess_methods,
+      corrFunList = list(corr_method = "spearman", corr_thresh = 0.95, group_neg_corr = TRUE),
+      filter_features = x$filter_features,
+      filterFunList = list(test = x$fs),
+      resamp_method = "repeatedcv", 
+      kfold = 10,
+      cv_times = 10,
+      training_frac = 0.80,
+      hyperparameters = NULL,
+      cross_val = NULL,
+      perf_metric_function = NULL,
+      perf_metric_name = NULL,
+      group_partitions = NULL,
+      class_weight = F,
+      find_feature_importance = FALSE,
+      feature_importance_method = c("permutation", "embedded"),
+      jobs = 1,
+      threads = 1,
+      seed = 0))
+  return(out)
+}
+```
+
+
+```{r}
+set.seed(123)
+new_comb <- apply_conditions(combinations)
+rd_samp <- sample(rownames(new_comb), 3)
+cb_grid <- new_comb[rd_samp,]
+out <- pipeline_iteration(cb_grid)
+out
+```
+
+
+```{r}
+
+```
+

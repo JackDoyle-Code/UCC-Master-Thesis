@@ -144,7 +144,7 @@ index_factor <- function(x, convert_bin = FALSE) {
 #' Function-7
 #' @noRd
 #' feature selection using LASSO
-glm_filter <- function(y, x, n = 100, cv_method = list(method = "cv", times = 10 , repeats = NA), outcome_type = "binary") {
+glm_filter <- function(y, x, n = 100, cv_method = list(method = "repeatedcv", times = 10 , repeats = 10), outcome_type = "binary") {
   family = switch(outcome_type,
                    "continuous" = "gaussian",
                    "binary" = "binomial",
@@ -193,7 +193,7 @@ boruta_filter <- function(y, x, n = 100, maxRuns = 100) { # getImp can be normal
 #' Function-9
 #' @noRd
 #' feature selection using RFE-SVM
-rfe_filter <- function(y, x, cv_method = list(method = "cv", times = 10 , repeats = NA)) {
+rfe_filter <- function(y, x, cv_method = list(method = "repeatedcv", times = 10 , repeats = 10)) {
   mx = ncol(x)
   ctrl = rfeControl(functions = caretFuncs,
                     method = cv_method[[1]],

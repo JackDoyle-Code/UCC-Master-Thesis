@@ -1,0 +1,231 @@
+---
+title: "Test run"
+output: html_document
+date: "2024-06-05"
+---
+
+```{r}
+in_path = "C:/Users/jacko/Documents/SeqBiomeML/SeqBiomeML/R/"
+# in_path = "C:/Users/jacko/Downloads/SeqBiomeML_latest/SeqBiomeML/R/"
+file_path <- list.files(in_path, full.names = TRUE)
+for(f_path in file_path) { source(f_path) }
+```
+
+
+```{r}
+# 94% of this data is 0s
+meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Metadata_1.csv")
+rsv = read.csv("C:/Users/jacko/Documents/SeqBiomeML/RSV_1.csv")
+# Be careful when doing this as the rownames are not 1:nrow(meta). It will have gaps (e.g. 1, 2, 4, 5, ...). This can cause issue in downstream analysis. Issue occurs in case_weight_vctr
+true_meta = meta[meta$INCLUDE == c("YES"), ] # Only selects samples that are supposed to be included for analysis
+rownames(rsv) = rsv$taxa
+rsv = rsv[, -1]
+rsv = as.data.frame(t(rsv))
+rsv = rsv[rownames(rsv) %in% true_meta$SampleID, ]
+```
+
+
+```{r}
+# Read DESCRIPTION file to extract Imports
+description_file <- "C:/Users/jacko/Downloads/SeqBiomeML_latest/SeqBiomeML/DESCRIPTION"
+description <- readLines(description_file)
+pkg = description[13:28]
+pkg = pkg[-15]
+
+for (i in pkg) {
+  x = sub(",", "", i)
+  y = trimws(x)
+  if (!requireNamespace(y, quietly = TRUE)) {
+    install.packages(y)
+  }
+  library(y, character.only = T)
+}
+```
+
+
+```{r}
+library(mRMRe)
+library(glmnet)
+library(Boruta)
+out = run_ml_cv(dataset = comp_data, metadata = con_ath, outcome_colname = "ParticipantType", group_colname = "SubjectID", scale_method = c("clr", "pseudo", 1),  preprocess_methods = c("nzv", "center", "scale"), filter_features = T, filterFunList = list(test = "mrmr_filter", n = 100), find_feature_importance = F, feature_importance_method = "permutation", seed = 0, method = "rf")
+
+out[[7]]
+```
+
+
+```{r}
+method = c("rf", "kknn", "glmnet", "svm", "rpart2", "xgbTree")
+scale_method = list(method = c("clr", "tss", "rclr", NULL), impute_method = c("pseudo", 'GBM', 'BL', 'SQ', 'CZM', NULL), val = c(1, "min")) # don't use clr without imputation, don't use rclr with imputation, don't use zComp with val
+preprocess_methods = c("nzv", "zv", "center", "scale") # don't use nzv and zv together, use center scale together
+corr_thresh = c(0.7, 0.95) # subject to change
+filterFunList = list(test = c(mrmr_filter, ttest_filter, wilcoxon_filter, boruta_filter, glm_filter, rfe_filter), n = c(50, 100, 300), maxRuns(100, 300, 500), cv_method = ) # n, maxRuns and cv_method subject to change
+resamp_method = c("cv", "repeatedcv", "loocv")
+n_outer_folds = 5 # subject to change
+n_inner_folds = 5 # subject to change
+class_weight = c(T, F)
+feature_importance_method = c("permutation", "embedded") # consider using together
+
+
+# Don't use correlation with feature selection for the moment
+# look up info about cv
+# look up a correlation value
+
+
+out <- run_ml_nestedcv(comp_data, con_ath, method = "rf", outcome_colname = "ParticipantType", group_colname = "SubjectID", scale_method = list("clr", "pseudo", 1), preprocess_methods = c("zv", "nzv"), corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE), filter_features = T, filterFunList = list(test = "mrmr_filter", n = 100), outer_folds = NULL, resamp_method = "cv", n_outer_folds = 5, n_inner_folds = 5, cv_times = 100, training_frac = 0.80, hyperparameters = NULL, cross_val = NULL, perf_metric_function = NULL, perf_metric_name = NULL, group_partitions = NULL, class_weight = FALSE, find_feature_importance = FALSE, feature_importance_method = "permutation", jobs = 1, threads = 1, seed = 0)
+
+lapply(out[[1]], function(x) x[[6]]) # to look at performance
+lapply(out[[1]], function(x) x[[7]]) # to look at plots
+```
+
+
+```{r}
+# for feature selection fiter_end
+y = true_meta$ParticipantType
+x = test1$filt_data
+
+ttest_filter(y, x)
+
+out = order(pval)
+outp = sort(pval)
+order(test1$pvalue)[sort(test1$pvalue) < 0.05]
+```
+
+
+```{r}
+hyper = get_hyperparams_list(test1[[1]], "svmRadial")
+
+test2 = nullModel(y = factor(y))
+test3 = predict(test2, test_data)
+multiClassSummary(data.frame(obs = factor(test_metadata$ParticipantType, levels = uniq_obs), pred = factor(test3, levels = uniq_obs)), lev = uniq_obs)
+sum(test_metadata$ParticipantType == "control")/40
+```
+
+
+```{r}
+con_ath = true_meta
+con_ath[con_ath$ParticipantType != "control", 2] = "Athlete"
+comp_data <- rsv[rownames(rsv) %in% con_ath$SampleID, ]
+```
+
+
+```{r}
+binary_meta = meta[meta$ParticipantType != "control", ]
+rownames(binary_meta) <- seq(1, nrow(binary_meta))
+binary_data = rsv[rownames(rsv) %in% binary_meta$SampleID, ]
+```
+
+
+```{r}
+outcome_type = "binary"
+method = "rf"
+set.seed(0)
+true_meta = con_ath
+rsv = comp_data
+library(progressr)
+y = true_meta[["ParticipantType"]]
+set.seed(0)
+rsv <- randomize_feature_order(rsv) %>% as.data.frame()
+rsv <- preprocess_samples(dataset = rsv, scale_method = list("clr", "pseudo", 1))
+training_inds = get_partition_indices(y, training_frac = 0.8)
+train_data <- rsv[training_inds, ]
+test_data <- rsv[-training_inds, ]
+train_metadata <- true_meta[training_inds, ]
+test_metadata <- true_meta[-training_inds, ]
+pre = preprocess_features(train_data, test_data, outcome_colname = "ParticipantType", preprocess_methods = c("nzv"), corrFunList = list(corr_method = "spearman", corr_thresh = 0.95, group_neg_corr = TRUE))
+train_data = pre[[1]]
+test_data = pre[[2]]
+filt_dataset <- filter_features_main(train_data = train_data, train_metadata = train_metadata, test_data = test_data, outcome_colname = "ParticipantType", filterFunList = list(test = "boruta_filter", n = 100, maxRuns = 100), outcome_type = outcome_type)
+train_data = filt_dataset[[1]]
+test_data = filt_dataset[[2]]
+hyperparameters <- get_hyperparams_list(train_data, method)
+tune_grid <- get_tuning_grid(hyperparameters, method)
+perf_metric_function <- get_perf_metric_fn("binary")
+perf_metric_name <- get_perf_metric_name("binary")
+cross_val = define_cv_unnested(resamp_method = "cv",
+        train_data = train_data,
+        train_metadata = train_metadata,
+        outcome_colname = "ParticipantType",
+        hyperparams_list = hyperparameters,
+        perf_metric_function = perf_metric_function,
+        kfold = 5,
+        seed = 0,
+        groups = NULL,
+        group_partitions = NULL,
+        class_probs = TRUE)
+trained_model_caret = train_model(
+      train_data = train_data,
+      train_metadata = train_metadata,
+      outcome_colname = "ParticipantType",
+      method = method,
+      cv = cross_val,
+      perf_metric_name = perf_metric_name,
+      tune_grid = tune_grid)
+performance_tbl <- get_performance_tbl(
+      trained_model = trained_model_caret,
+      test_data = test_data,
+      test_metadata = test_metadata,
+      outcome_colname = "ParticipantType",
+      perf_metric_function = perf_metric_function,
+      perf_metric_name = perf_metric_name,
+      method = method,
+      class_probs = T)
+roc_out = plot_main(
+      trained_model = trained_model_caret,
+      test_data = test_data,
+      test_metadata = test_metadata,
+      outcome_colname = "ParticipantType",
+      method = method,
+      outcome_type = outcome_type)
+feat_imp = feature_importance_main(
+            feature_importance_method,
+            trained_model = trained_model_caret,
+            test_data = test_data,
+            test_metadata = test_metadata,
+            outcome_colname = "ParticipantType",
+            perf_metric_function = perf_metric_function,
+            perf_metric_name = perf_metric_name,
+            class_probs = T,
+            method = method,
+            seed = 0,
+            nperms = 100,
+            threads = 1,
+            performance_table = performance_tbl)
+# pre
+# test_data
+# test_metadata
+# cross_val
+# trained_model_caret
+performance_tbl
+roc_out
+feat_imp
+# test = feat_imp[feat_imp$pvalue > 0.95, ]
+# test
+```
+
+
+```{r}
+# none of the below worked
+library(shapper)
+library(shapr)
+library(shapley)
+library(reticulate) # allows the use of python in R, it does work
+```
+
+
+```{r}
+outcome_colname = "ParticipantType"
+
+```
+
+
+```{r}
+# to do list
+
+# set up grid and model selection
+# find correlation threshold
+# compare cv nested vs cv unnested (DONE)
+# get the other datasets ready
+# look at bank account and spending over the last month
+# look at cv
+# look at car insurance, tax and nct
+```

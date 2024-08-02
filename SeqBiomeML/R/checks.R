@@ -329,13 +329,13 @@ check_scale_method <- function(scale_method) {
 #' @noRd
 #' Check feature importance methods
 check_feature_importance <- function(feature_importance_method, method) {
-  if (!feature_importance_method %in% c("permutation", "embedded")) {
+  if (!all(feature_importance_method %in% c("permutation", "embedded"))) {
     stop(paste0(
-      "Feature Importance method must be either permutation or embedded",
+      "Feature Importance method must be either permutation and/or embedded",
       "    You provided: ", feature_importance_method
     ))
   }
-  if (feature_importance_method == "embedded") {
+  if ("embedded" %in% feature_importance_method) {
     if (!method %in% c("glmnet", "rpart2", "xgbTree", "rf")) {
       stop(paste0(
         "Embedded feature importance is only compatible with the following models: glmnet, rpart2, xgbTree, rf",
