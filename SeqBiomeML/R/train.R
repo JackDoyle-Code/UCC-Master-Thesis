@@ -8,6 +8,7 @@ train_model <- function(train_data,
   cv,
   perf_metric_name,
   tune_grid,
+  weights = NULL, ### added weights argument
   ...) {
   withCallingHandlers(
     if (!grepl("custom", method)) {
@@ -24,6 +25,7 @@ train_model <- function(train_data,
         metric = perf_metric_name,
         trControl = cv,
         tuneGrid = tune_grid,
+        weights = weights, ### added weights argument
 
         ...
       )

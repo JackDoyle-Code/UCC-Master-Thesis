@@ -10,6 +10,7 @@ nestedcvCore <- function(
   corrFunList,
   outcome_type,
   class_probs,
+  class_weight,
   outcome_colname,
 
   out_fold,
@@ -24,15 +25,11 @@ nestedcvCore <- function(
 
   filter_features,
   filterFunList,
-  grouped_feat,
 
   threads,
   seed
 ) {
 
-  out_fold <- paste0("Fold", out_fold)
-  tic = Sys.time()
-  message_parallel("Starting ", out_fold, " ...")
 
   # Get the data, metadata and groups for inner fold
   tmp_train_data <- dataset[outer_folds[[out_fold]], ]
@@ -40,6 +37,24 @@ nestedcvCore <- function(
   tmp_train_metadata <- metadata[outer_folds[[out_fold]], ]
   tmp_test_metadata <- metadata[-outer_folds[[out_fold]], ]
   tmp_groups <- groups[outer_folds[[out_fold]]]
+
+
+  ### moved this call so it doesn't interfere with above
+  out_fold <- paste0("Fold", out_fold)
+  tic = Sys.time()
+  message_parallel("Starting ", out_fold, " ...")
+
+
+  ### added the below section
+  if (class_weight == TRUE) {
+    case_weights_vctr <- tmp_train_metadata %>% ### removed filter(row.names()) and replaced with subsetting
+      dplyr::count(!!rlang::sym(outcome_colname)) %>% # sym unquotes the colname, counts the number of rows for each group (e.g. control)
+      dplyr::mutate(weight = n / sum(n)) %>% # adds a column called weight calculated as such
+      dplyr::select(outcome_colname, weight) %>% # select just the outcome_colname and weight
+      dplyr::right_join(x = tmp_train_metadata, by = outcome_colname) %>% # adds weight to the metadata using outcome_colname as joining point
+      dplyr::pull(weight)
+  }
+
 
   ### added this line
   # At this stage implement feature preprocessing
@@ -127,7 +142,8 @@ nestedcvCore <- function(
     method = method,
     cv = cross_val,
     perf_metric_name = perf_metric_name,
-    tune_grid = tune_grid
+    tune_grid = tune_grid,
+    weights = if (class_weight) case_weights_vctr else NULL
   )
 
   message("Calculating performance of test dataset.")

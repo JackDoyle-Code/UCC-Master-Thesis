@@ -6,6 +6,82 @@ output: html_document
 ---
 
 ```{r}
+in_path = "C:/Users/jacko/Documents/SeqBiomeML/SeqBiomeML/R/"
+# in_path = "C:/Users/jacko/Downloads/SeqBiomeML_latest/SeqBiomeML/R/"
+file_path <- list.files(in_path, full.names = TRUE)
+for(f_path in file_path) { source(f_path) }
+```
+
+
+```{r}
+# Reading in the Data
+S_meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_metadata.csv")
+S_rsv = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_rsv.csv")
+S_species = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_species.csv")
+S_genus = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_species.csv")
+Meta_meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_metadata.csv")
+Meta_species = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_species.csv")
+Meta_EC = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_EC.csv")
+
+# Metadata
+S_meta <- S_meta[S_meta$INCLUDE == c("YES"), ] # Only selects samples that are supposed to be included for analysis
+Meta_meta <- Meta_meta[, 1:14] # removes all blank columns
+Meta_meta <- Meta_meta[Meta_meta$INCLUDE == c("YES"), ] # Only selects samples that are supposed to be included for analysis
+
+# Formats the count table so that they are applicable with the functions
+format_data <- function(dataset, metadata) {
+  rownames(dataset) = dataset$taxa # renames the rows as the taxa column
+  dataset = dataset[, -1] # removes taxa column
+  new_dataset = as.data.frame(apply(dataset, 1, as.numeric)) # switches samples to rows and features to columns and makes them numeric
+  rownames(new_dataset) = colnames(dataset) # renames the rows
+  new_dataset = new_dataset[rownames(new_dataset) %in% metadata$SampleID, ] # sets all values as numeric
+  return(dataset = new_dataset)
+}
+
+# Count Data
+S_data <- list(S_rsv = S_rsv, S_species = S_species, S_genus = S_genus)
+Meta_data <- list(Meta_species = Meta_species, Meta_EC = Meta_EC)
+new_S_data <- lapply(S_data, function(x) format_data(x, S_meta))
+new_Meta_data <- lapply(Meta_data, function(x) format_data(x, Meta_meta))
+S_rsv = new_S_data[["S_rsv"]]
+S_species = new_S_data[["S_species"]]
+S_genus = new_S_data[["S_genus"]]
+Meta_species = new_Meta_data[["Meta_species"]]
+Meta_EC = new_Meta_data[["Meta_EC"]]
+```
+
+
+```{r}
+# Read DESCRIPTION file to extract Imports
+description_file <- "C:/Users/jacko/Downloads/SeqBiomeML_latest/SeqBiomeML/DESCRIPTION"
+description <- readLines(description_file)
+pkg = description[13:28]
+pkg = pkg[-15]
+
+for (i in pkg) {
+  x = sub(",", "", i)
+  y = trimws(x)
+  if (!requireNamespace(y, quietly = TRUE)) {
+    install.packages(y)
+  }
+  library(y, character.only = T)
+}
+```
+
+
+```{r}
+library(mRMRe)
+library(glmnet)
+library(Boruta)
+S_meta[S_meta$ParticipantType != "control", 2] = "Athlete"
+comp_data <- S_rsv[rownames(S_rsv) %in% S_meta$SampleID, ]
+
+Meta_meta[Meta_meta$Group != "Control", 3] = "Athlete"
+comp_data <- Meta_EC[rownames(Meta_EC) %in% Meta_meta$SampleID, ]
+```
+
+
+```{r}
 # Don't use correlation with feature selection for the moment
 # look up info about cv
 # look up a correlation value
@@ -14,35 +90,21 @@ output: html_document
 # n, maxRuns and cv_method subject to change
 
 # Define variables
-dataset = list(comp_data)
-metadata = list(con_ath)
-method = c("rf", "kknn", "glmnet", "svm") # rpart2 and xgbTree can be included
-outcome_colname = "ParticipantType"
-#group_colname = "SubjectID"
+method = c("rf", "kknn", "glmnet", "svmRadial") # rpart2 and xgbTree can be included
 
 ### Preprocessing
-scale_method = c("clr", "tss", "rclr", NULL)
-impute_method = c("pseudo", 'CZM', NULL) # GBM, BL and SQ can be included
+scale_method = c("clr", "tss", "rclr")
+impute_method = c("pseudo", 'CZM', NA) # GBM, BL and SQ can be included
 val = c(1, "min")
 preprocess_methods = c("nzv", list(c("center","scale")), list(c("nzv", "center", "scale")))
 # can include zv on its own and inconjuction with others
 #corr_thresh = c(0.95) # should ask shriram for conformation # using 0.95 as it is stringent and still removes a significant proportion of features (~77%)
+# currently not using corr_thresh as i don't want to use it with feature selection. If i use it as a feature selection method it will add to combinations
 
 ### Feature selection
 filter_features = c(T, F)
 fs_method = c("mrmr_filter", "boruta_filter", "glm_filter", "rfe_filter") 
 # can include ttest_filter and wilcoxon_filter
-#n = c(50, 100, 300)
-#maxRuns = c(100) # 100, 300, 500 all returned the same top 100 features
-#cv_method = c("repeatedcv") # can be cv or loocv as well but repeatedcv reduces variance and bias the most
-#times = c(10)
-#repeats = c(10)
-
-### Cross-Validation
-#resamp_method = c("repeatedcv")
-#n_outer_folds = 10
-#n_inner_folds = 10
-#cv_times = 10
 
 ### etc
 #class_weight = c(T)
@@ -52,11 +114,8 @@ fs_method = c("mrmr_filter", "boruta_filter", "glm_filter", "rfe_filter")
 
 ```{r}
 # Define combinations
+set.seed(0)
 combinations <- expand.grid(
-  dataset = dataset,
-  metadata = metadata,
-  outcome_colname = outcome_colname,
-  #group_colname = group_colname,
   method = method,
   scale_method = scale_method,
   impute_method = impute_method,
@@ -73,11 +132,13 @@ combinations <- expand.grid(
 # remove variables that are not compatible with each other
 apply_conditions <- function(cb_grid) {
   # removes rows that use clr with null imputation method
-  out <- cb_grid[!(cb_grid$scale_method == "clr" & is.null(cb_grid$impute_method)), ]
+  out = cb_grid[!(cb_grid$scale_method == "clr" & is.na(cb_grid$impute_method)), ]
   # removes rows that use rclr with imputation methods other than null
-  out <- out[!(out$scale_method == "rclr" & !is.null(out$impute_method)), ]
+  out = out[!(out$scale_method == "rclr" & !is.na(out$impute_method)), ]
   # removes rows that don't use pseudo and use min or 1
-  out <- out[!(out$impute_method != "pseudo" & (out$val == "min" | out$val == 1)), ]
+  out = out[!(out$impute_method %in% c("CZM", NA) & (out$val == 1)), ]
+  # reindexes the rows
+  rownames(out) = seq(1, nrow(out))
   return(out)
 }
 ```
@@ -85,17 +146,17 @@ apply_conditions <- function(cb_grid) {
 
 ```{r}
 # iterate through each set of variables in the combination grid and runs the ML pipeline on them
-pipeline_iteration <- function(cb_grid) {
+pipeline_iteration_unnested <- function(cb_grid, dataset, metadata, outcome_colname = NULL, group_colname = NULL) {
   out <- apply(cb_grid, 1, function(x) 
     run_ml_cv(
-      dataset = x$dataset,
-      metadata = x$metadata,
+      dataset = dataset,
+      metadata = metadata,
       method = x$method,
-      outcome_colname = x$outcome_colname,
-      group_colname = x$group_colname,
+      outcome_colname = outcome_colname,
+      group_colname = group_colname,
       scale_method = list(x$scale_method, x$impute_method, x$val),
       preprocess_methods = x$preprocess_methods,
-      corrFunList = list(corr_method = "spearman", corr_thresh = 0.95, group_neg_corr = TRUE),
+      corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE),
       filter_features = x$filter_features,
       filterFunList = list(test = x$fs),
       resamp_method = "repeatedcv", 
@@ -119,16 +180,69 @@ pipeline_iteration <- function(cb_grid) {
 
 
 ```{r}
-set.seed(123)
-new_comb <- apply_conditions(combinations)
-rd_samp <- sample(rownames(new_comb), 3)
-cb_grid <- new_comb[rd_samp,]
-out <- pipeline_iteration(cb_grid)
-out
+# iterate through each set of variables in the combination grid and runs the ML pipeline on them
+pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colname = NULL, group_colname = NULL) {
+  out <- apply(cb_grid, 1, function(x) 
+    run_ml_cv(
+      dataset = dataset,
+      metadata = metadata,
+      method = x$method,
+      outcome_colname = outcome_colname,
+      group_colname = group_colname,
+      scale_method = list(x$scale_method, x$impute_method, x$val),
+      preprocess_methods = x$preprocess_methods,
+      corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE),
+      filter_features = x$filter_features,
+      filterFunList = list(test = x$fs),
+      outer_folds = NULL,
+      resamp_method = "repeatedcv", 
+      n_outer_folds = 10,
+      n_inner_folds = 10,
+      cv_times = 10,
+      training_frac = 0.80,
+      hyperparameters = NULL,
+      cross_val = NULL,
+      perf_metric_function = NULL,
+      perf_metric_name = NULL,
+      group_partitions = NULL,
+      class_weight = F,
+      find_feature_importance = FALSE,
+      feature_importance_method = "permutation",
+      jobs = 1,
+      threads = 1,
+      seed = 0))
+  return(out)
+}
 ```
 
 
 ```{r}
+best_models <- function(combination_grid, dataset, metadata, outcome_colname = NULL, group_colname = NULL, seed = NULL, n = 50, perf_metric = "AUC") {
+  best_models = NULL
+  best_params = NULL
+  set.seed(seed)
+  new_comb = apply_conditions(combination_grid)
+  models = pipeline_iteration_nested(new_comb, dataset, metadata, outcome_colname, group_colname)
+  if (!is.null(n)) {
+    auc_list = sapply(models, function(x) x[[perf_metric]][2, 3])
+    sorted_auc = sort(unlist(auc_list), decreasing = T)
+    best_auc = names(head(sorted_auc, n))
+    best_names = sub("\\..*", "", best_auc)
+    best_models = lapply(best_names, function(x) models[[x]])
+    best_params = do.call(rbind, lapply(best_names, function(x) new_comb[as.numeric(x), ]))
+  }
+  return(list(best_models = best_models, best_params = best_params, all_models = models, all_params = new_comb))
+}
+```
+
+
+```{r}
+# the last 2 rows won't run because they are filtered out by apply_conditions
+run1_30 <- best_models(combinations[1:10, ], dataset = comp_data, metadata = S_meta, outcome_colname = "ParticipantType", seed = 123, n = NULL)
+
+combinations[1:10,]
+run1_30[[4]]
+run1_50_60[[4]]
 
 ```
 

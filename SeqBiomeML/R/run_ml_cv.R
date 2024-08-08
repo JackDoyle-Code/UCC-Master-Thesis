@@ -151,6 +151,7 @@ run_ml_cv <-
                   feature_importance_method
                 )
 
+
     # extracts check_all outputs
     outcome_colname <- check_out[[1]]
     na_vals <- check_out[[2]]
@@ -206,7 +207,7 @@ run_ml_cv <-
           dplyr::count(!!rlang::sym(outcome_colname)) %>% # sym unquotes the colname, counts the number of rows for each group (e.g. control)
           dplyr::mutate(weight = n / sum(n)) %>% # adds a column called weight calculated as such
           dplyr::select(outcome_colname, weight) %>% # select just the outcome_colname and weight
-          dplyr::right_join(metadata, by = outcome_colname) %>% # adds weight to the metadata using outcome_colname as joining point
+          dplyr::right_join(x = metadata, by = outcome_colname) %>% # adds weight to the metadata using outcome_colname as joining point
           dplyr::pull(weight)
       }
     } else {
@@ -379,57 +380,55 @@ run_ml_cv <-
     ### @feature_importance_endoR.R -> Function-1
     ### @feature_importance_permuted.R -> Function-1 to Function-6
     if (find_feature_importance) {
-      if (feature_importance_method == "endoR") {
-        message("Performing feature importance analysis using endoR")
-        # Feature importance analysis and plot
-        ### @feature_importance.R -> Function-1
-        if (method == "rf" | method == "customrf") {
-          model_type = "random forest"
-        } else if (method == "xgbTree") {
-          model_type = "xgboost"
-        } else {
-          model_type = NULL
-        }
-        if (!is.null(model_type)) {
-          feat_imp = feature_importance_endoR(
-            trained_model = trained_model_caret,
-            method = model_type,
-            train_data = train_data,
-            train_metadata = train_metadata,
-            outcome_colname = outcome_colname,
-            jobs = threads
-          )
-        } else {
-          message("Skipping feature importance analysis as ML method is not supported by endoR.")
-          feat_imp = list("feature_importance_out" = "Skipped feature importance analysis",
-                          "feature_importance_plot" = "Skipped feature importance plot")
-        }
-      }
+      # if (feature_importance_method == "endoR") {
+      #   message("Performing feature importance analysis using endoR")
+      #   # Feature importance analysis and plot
+      #   ### @feature_importance.R -> Function-1
+      #   if (method == "rf" | method == "customrf") {
+      #     model_type = "random forest"
+      #   } else if (method == "xgbTree") {
+      #     model_type = "xgboost"
+      #   } else {
+      #     model_type = NULL
+      #   }
+      #   if (!is.null(model_type)) {
+      #     feat_imp = feature_importance_endoR(
+      #       trained_model = trained_model_caret,
+      #       method = model_type,
+      #       train_data = train_data,
+      #       train_metadata = train_metadata,
+      #       outcome_colname = outcome_colname,
+      #       jobs = threads
+      #     )
+      #   } else {
+      #     message("Skipping feature importance analysis as ML method is not supported by endoR.")
+      #     feat_imp = list("feature_importance_out" = "Skipped feature importance analysis",
+      #                     "feature_importance_plot" = "Skipped feature importance plot")
+      #   }
+      # }
 
-      if (feature_importance_method == "permutation") {
-        message("Performing feature importance analysis using permutation")
-        # Feature importance analysis and plot
-        ### @feature_importance.R -> Function-1
-          feat_imp = with_progress(feature_importance_permuted(
-            trained_model = trained_model_caret,
-            test_data = test_data,
-            test_metadata = test_metadata,
-            outcome_colname = outcome_colname,
-            perf_metric_function = perf_metric_function,
-            perf_metric_name = perf_metric_name,
-            performance_table = performance_tbl,
-            class_probs = class_probs,
-            method = method,
-            grouped_features_list = NULL,
-            seed = seed,
-            nperms = 100,
-            threads = threads))
-      }
-    } else {
-      message("Skipping feature importance analysis.")
-      feat_imp = list("feature_importance_out" = "Skipped feature importance analysis",
-                      "feature_importance_plot" = "Skipped feature importance plot")
-    }
+      message("Performing feature importance analysis")
+      # Feature importance analysis and plot
+      ### @feature_importance.R -> Function-1
+        feat_imp = feature_importance_main(
+          trained_model = trained_model_caret,
+          test_data = test_data,
+          test_metadata = test_metadata,
+          outcome_colname = outcome_colname,
+          perf_metric_function = perf_metric_function,
+          perf_metric_name = perf_metric_name,
+          performance_table = performance_tbl,
+          class_probs = class_probs,
+          method = method,
+          grouped_features_list = NULL,
+          seed = seed,
+          nperms = 100,
+          threads = threads)
+  } else {
+    message("Skipping feature importance analysis.")
+    feat_imp = list("feature_importance_out" = "Skipped feature importance analysis",
+                    "feature_importance_plot" = "Skipped feature importance plot")
+  }
 
     # return
     return(

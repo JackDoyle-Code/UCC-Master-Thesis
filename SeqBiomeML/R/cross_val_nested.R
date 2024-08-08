@@ -10,7 +10,9 @@ define_cv_nested <- function(resamp_method, train_data, train_metadata, outcome_
   # for cross-validation
   if(resamp_method == "cv") {
     if (!is.null(groups)) {
-      cvIndex <- create_grouped_k_innerfolds(groups,
+      cvIndex <- create_grouped_k_innerfolds(
+        resamp_method,
+        groups,
         inner_fold = inner_fold
       )
       message("Groups will be kept together in CV partitions")
@@ -42,7 +44,9 @@ define_cv_nested <- function(resamp_method, train_data, train_metadata, outcome_
   # for repeated cross-validation
   if(resamp_method == "repeatedcv") {
     if (!is.null(groups)) {
-      cvIndex <- create_grouped_k_innerfolds(groups,
+      cvIndex <- create_grouped_k_innerfolds(
+        resamp_method,
+        groups,
         inner_fold = inner_fold,
         cv_times = cv_times
       )

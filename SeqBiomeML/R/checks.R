@@ -4,7 +4,7 @@
 #' Check all params that don't return a value
 check_all <- function(dataset, metadata, outcome_colname, method, scale_method, preprocess_methods,
                       kfold, perf_metric_function, perf_metric_name, group_colname,
-                      group_partitions, seed, hyperparameters, feature_importance_method) {
+                      group_partitions = NULL, seed, hyperparameters, feature_importance_method) {
 
   check_seed(seed)
   check_method(method, hyperparameters)
@@ -357,8 +357,5 @@ help_kfold <- function(kfold, dataset) {
   if (not_a_number | not_an_int | kfold <= 1) {
     stop(paste0("`kfold` must be an integer between 1 and the number of features in the data.\n",
                 "  You provided ", kfold, " folds and your dataset has ", nfeats, " features."))
-  }
-  if (nrow(dataset) < 1000) {
-    warning("Sample size is < 1000 in length. Using k-fold cv may produce biased results. Consider using alternative method")
   }
 }

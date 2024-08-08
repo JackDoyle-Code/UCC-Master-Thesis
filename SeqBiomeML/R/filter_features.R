@@ -11,7 +11,7 @@ filter_features_main <- function(
   # remove features using specific feature selection methods
   args <- list(y = train_metadata[[outcome_colname]], x = train_data) ### replaced pull
   if (filterFunList[["test"]] == "glm_filter") {
-    args <- append(args, outcome_type)
+    args[["outcome_type"]] = outcome_type
   }
   args <- append(args, filterFunList[!names(filterFunList) %in% "test"]) # using filterFunList returns 0.05 and not $p_cutoff 0.05
   fset <- do.call(filterFunList[["test"]], args) # calls the function (either wilcoxon/ttest)
@@ -145,6 +145,7 @@ index_factor <- function(x, convert_bin = FALSE) {
 #' @noRd
 #' feature selection using LASSO
 glm_filter <- function(y, x, n = 100, cv_method = list(method = "repeatedcv", times = 10 , repeats = 10), outcome_type = "binary") {
+  # cv_method uses repeatedcv because it reduces the variance and bias the most, 10 times and repeats are used as that is what is recommended by literature
   family = switch(outcome_type,
                    "continuous" = "gaussian",
                    "binary" = "binomial",
@@ -174,7 +175,8 @@ glm_filter <- function(y, x, n = 100, cv_method = list(method = "repeatedcv", ti
 #' Function-8
 #' @noRd
 #' feature selection using Boruta
-boruta_filter <- function(y, x, n = 100, maxRuns = 100) { # getImp can be normalised permutation, raw permutation or gini impurity. Higher value for MaxRuns will likely reduce tentative features
+boruta_filter <- function(y, x, n = 100, maxRuns = 100) { # getImp can be normalised permutation, raw permutation or gini impurity.
+# Higher value for MaxRuns will likely reduce tentative features, but 100, 300, 500 still return the same top 100 features
   stats = Boruta(x, as.factor(y), maxRuns = maxRuns)
   if (!is.null(n)) {
     imp = attStats(stats)
@@ -193,7 +195,8 @@ boruta_filter <- function(y, x, n = 100, maxRuns = 100) { # getImp can be normal
 #' Function-9
 #' @noRd
 #' feature selection using RFE-SVM
-rfe_filter <- function(y, x, cv_method = list(method = "repeatedcv", times = 10 , repeats = 10)) {
+rfe_filter <- function(y, x, cv_method = list(method = "repeatedcv", times = 10 , repeats = 10)) { # cv_method uses repeatedcv
+# because it reduces the variance and bias the most, 10 times and repeats are used as that is what is recommended by literature
   mx = ncol(x)
   ctrl = rfeControl(functions = caretFuncs,
                     method = cv_method[[1]],
