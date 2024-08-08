@@ -30,7 +30,7 @@ define_outer_folds <- function(metadata, outcome_colname, outer_fold, groups, se
 create_grouped_k_outerfolds <- function(groups, outer_fold = 10) {
   out <- caret::groupKFold(groups, k = outer_fold)
   if (any(sapply(out, length)) == 0) {
-    stop("Could not split the data into muti-folds. This could mean you do not have enough samples or groups to perform an ML analysis using the groupsing functionality. Alternatively, you can try another seed, or decrease outer_fold.")
+    stop("Could not split the data into multi-folds. This could mean you do not have enough samples or groups to perform an ML analysis using the groupsing functionality. Alternatively, you can try another seed, or decrease outer_fold.")
   }
   return(out)
 }

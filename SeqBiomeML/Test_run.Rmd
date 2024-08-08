@@ -14,8 +14,8 @@ for(f_path in file_path) { source(f_path) }
 
 ```{r}
 # 94% of this data is 0s
-meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Metadata_1.csv")
-rsv = read.csv("C:/Users/jacko/Documents/SeqBiomeML/RSV_1.csv")
+meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_metadata.csv")
+rsv = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_rsv.csv")
 # Be careful when doing this as the rownames are not 1:nrow(meta). It will have gaps (e.g. 1, 2, 4, 5, ...). This can cause issue in downstream analysis. Issue occurs in case_weight_vctr
 true_meta = meta[meta$INCLUDE == c("YES"), ] # Only selects samples that are supposed to be included for analysis
 rownames(rsv) = rsv$taxa
@@ -54,24 +54,7 @@ out[[7]]
 
 
 ```{r}
-method = c("rf", "kknn", "glmnet", "svm", "rpart2", "xgbTree")
-scale_method = list(method = c("clr", "tss", "rclr", NULL), impute_method = c("pseudo", 'GBM', 'BL', 'SQ', 'CZM', NULL), val = c(1, "min")) # don't use clr without imputation, don't use rclr with imputation, don't use zComp with val
-preprocess_methods = c("nzv", "zv", "center", "scale") # don't use nzv and zv together, use center scale together
-corr_thresh = c(0.7, 0.95) # subject to change
-filterFunList = list(test = c(mrmr_filter, ttest_filter, wilcoxon_filter, boruta_filter, glm_filter, rfe_filter), n = c(50, 100, 300), maxRuns(100, 300, 500), cv_method = ) # n, maxRuns and cv_method subject to change
-resamp_method = c("cv", "repeatedcv", "loocv")
-n_outer_folds = 5 # subject to change
-n_inner_folds = 5 # subject to change
-class_weight = c(T, F)
-feature_importance_method = c("permutation", "embedded") # consider using together
-
-
-# Don't use correlation with feature selection for the moment
-# look up info about cv
-# look up a correlation value
-
-
-out <- run_ml_nestedcv(comp_data, con_ath, method = "rf", outcome_colname = "ParticipantType", group_colname = "SubjectID", scale_method = list("clr", "pseudo", 1), preprocess_methods = c("zv", "nzv"), corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE), filter_features = T, filterFunList = list(test = "mrmr_filter", n = 100), outer_folds = NULL, resamp_method = "cv", n_outer_folds = 5, n_inner_folds = 5, cv_times = 100, training_frac = 0.80, hyperparameters = NULL, cross_val = NULL, perf_metric_function = NULL, perf_metric_name = NULL, group_partitions = NULL, class_weight = FALSE, find_feature_importance = FALSE, feature_importance_method = "permutation", jobs = 1, threads = 1, seed = 0)
+out1 <- run_ml_nestedcv(comp_data, S_meta, method = "rf", outcome_colname = "ParticipantType", group_colname = "SubjectID", scale_method = list("clr", "pseudo", 1), preprocess_methods = c("nzv"), corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE), filter_features = T, filterFunList = list(test = "mrmr_filter", n = 100), outer_folds = NULL, resamp_method = "cv", n_outer_folds = 3, n_inner_folds = 5, cv_times = 10, training_frac = 0.80, hyperparameters = NULL, cross_val = NULL, perf_metric_function = NULL, perf_metric_name = NULL, class_weight = FALSE, find_feature_importance = FALSE, feature_importance_method = "permutation", jobs = 1, threads = 1, seed = 123)
 
 lapply(out[[1]], function(x) x[[6]]) # to look at performance
 lapply(out[[1]], function(x) x[[7]]) # to look at plots
@@ -119,7 +102,7 @@ binary_data = rsv[rownames(rsv) %in% binary_meta$SampleID, ]
 outcome_type = "binary"
 method = "rf"
 set.seed(0)
-true_meta = con_ath
+true_meta = S_meta
 rsv = comp_data
 library(progressr)
 y = true_meta[["ParticipantType"]]
@@ -131,7 +114,7 @@ train_data <- rsv[training_inds, ]
 test_data <- rsv[-training_inds, ]
 train_metadata <- true_meta[training_inds, ]
 test_metadata <- true_meta[-training_inds, ]
-pre = preprocess_features(train_data, test_data, outcome_colname = "ParticipantType", preprocess_methods = c("nzv"), corrFunList = list(corr_method = "spearman", corr_thresh = 0.95, group_neg_corr = TRUE))
+pre = preprocess_features(train_data, test_data, outcome_colname = "ParticipantType", preprocess_methods = c("nzv"), corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE))
 train_data = pre[[1]]
 test_data = pre[[2]]
 filt_dataset <- filter_features_main(train_data = train_data, train_metadata = train_metadata, test_data = test_data, outcome_colname = "ParticipantType", filterFunList = list(test = "boruta_filter", n = 100, maxRuns = 100), outcome_type = outcome_type)
@@ -139,8 +122,8 @@ train_data = filt_dataset[[1]]
 test_data = filt_dataset[[2]]
 hyperparameters <- get_hyperparams_list(train_data, method)
 tune_grid <- get_tuning_grid(hyperparameters, method)
-perf_metric_function <- get_perf_metric_fn("binary")
-perf_metric_name <- get_perf_metric_name("binary")
+perf_metric_function <- get_perf_metric_fn(outcome_type)
+perf_metric_name <- get_perf_metric_name(outcome_type)
 cross_val = define_cv_unnested(resamp_method = "cv",
         train_data = train_data,
         train_metadata = train_metadata,
@@ -148,6 +131,7 @@ cross_val = define_cv_unnested(resamp_method = "cv",
         hyperparams_list = hyperparameters,
         perf_metric_function = perf_metric_function,
         kfold = 5,
+        cv_times = 0,
         seed = 0,
         groups = NULL,
         group_partitions = NULL,
@@ -159,7 +143,8 @@ trained_model_caret = train_model(
       method = method,
       cv = cross_val,
       perf_metric_name = perf_metric_name,
-      tune_grid = tune_grid)
+      tune_grid = tune_grid,
+      weights = NULL)
 performance_tbl <- get_performance_tbl(
       trained_model = trained_model_caret,
       test_data = test_data,
@@ -213,19 +198,115 @@ library(reticulate) # allows the use of python in R, it does work
 
 
 ```{r}
-outcome_colname = "ParticipantType"
-
+]
 ```
 
 
 ```{r}
-# to do list
+groups = S_meta[["SubjectID"]]
+outcome_colname = "ParticipantType"
+dataset <- preprocess_samples(dataset = comp_data, scale_method = list("clr", "pseudo", 1))
+outer_folds <- define_outer_folds(metadata = S_meta, outcome_colname = outcome_colname, outer_fold = 5, groups = groups, seed = 123)
+test <- parallel::mclapply(
+  seq_along(outer_folds), 
+  function(out_fold) {
+    tryCatch(
+      {
+        nestedcvCore(
+          dataset = dataset,
+          metadata = S_meta,
+          groups = groups,
+          method = "rf",
+          preprocess_methods = c("nzv"),
+          corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE),
+          outcome_type = "binary",
+          class_probs = TRUE,
+          outcome_colname = outcome_colname,
+          out_fold = out_fold,
+          outer_folds = outer_folds,
+          hyperparameters = NULL,
+          resamp_method = "cv",
+          perf_metric_name = NULL,
+          perf_metric_function = NULL,
+          n_inner_folds = 5,
+          cv_times = 0,
+          filter_features = TRUE,
+          filterFunList = list(test = "mrmr_filter", n = 100),
+          threads = 1,
+          seed = 0,
+          class_weight = F
+        )
+      }, 
+      error = function(e) {
+        print(e)
+        NULL
+      }
+    )
+  }, 
+  mc.cores = 1, 
+  mc.allow.recursive = FALSE
+)
 
-# set up grid and model selection
-# find correlation threshold
-# compare cv nested vs cv unnested (DONE)
-# get the other datasets ready
-# look at bank account and spending over the last month
-# look at cv
-# look at car insurance, tax and nct
+names(test) <- paste0("Fold", seq(1, length(test)))
+
+test[[5]][[6]]
 ```
+
+
+```{r}
+test1 = nestedcvCore(
+        dataset = dataset,
+        metadata = S_meta,
+        groups = groups,
+        method = "rf",
+        preprocess_methods = c("nzv"),
+        corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE),
+        outcome_type = "binary",
+        class_probs = TRUE,
+        outcome_colname = outcome_colname,
+        out_fold = 4,
+        outer_folds = outer_folds,
+        hyperparameters = NULL,
+        resamp_method = "cv",
+        perf_metric_name = NULL,
+        perf_metric_function = NULL,
+        n_inner_folds = 5,
+        cv_times = 0,
+        filter_features = TRUE,
+        filterFunList = list(test = "mrmr_filter", n = 100),
+        threads = 1,
+        seed = 0,
+        class_weight = F
+      )
+```
+
+
+```{r}
+### for dealing with test sets that only have one factor
+pred_type <- "raw"
+pred_type <- "prob"
+preds <- stats::predict(test[[4]][[1]], test[[4]][[2]], type = pred_type)
+uniq_obs <- unique(test[[4]][[3]][["ParticipantType"]]) ### replaced pull and removed as.character(trained_model$pred$obs), all factors should be in outcome_colname
+
+###### this is the changed section
+# Add missing level if only one factor level is present
+if (length(uniq_obs) == 1) {
+  missinglevel <- test[[5]][[1]]$pred$obs %>%
+    unique() %>%
+    setdiff(uniq_obs) %>%
+    as.character() # extracts missing factor
+  uniq_obs <- c(uniq_obs, missinglevel)
+}
+######
+
+obs <- factor(test[[4]][[3]][[outcome_colname]], levels = uniq_obs)
+if (class_probs) {
+  pred_class <- factor(names(preds)[apply(preds, 1, which.max)], levels = uniq_obs)
+  perf_met <- perf_metric_function(data.frame(obs = obs, pred = pred_class, preds), lev = uniq_obs)
+}
+else {
+  perf_met <- perf_metric_function(data.frame(obs = obs, pred = preds), lev = uniq_obs)
+}
+return(perf_met)
+```
+

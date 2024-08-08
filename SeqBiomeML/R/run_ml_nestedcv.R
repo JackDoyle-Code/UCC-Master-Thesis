@@ -121,11 +121,11 @@ run_ml_nestedcv <-
     n_inner_folds = 5,
     cv_times = 100,
     training_frac = 0.80,
+    ### removed group_partitions
     hyperparameters = NULL,
     cross_val = NULL,
     perf_metric_function = NULL,
     perf_metric_name = NULL,
-    group_partitions = NULL,
     class_weight = FALSE,
 
     find_feature_importance = FALSE,
@@ -141,20 +141,20 @@ run_ml_nestedcv <-
     # Various checks
     ### @checks.R -> Function-1 and Function-12
     check_out <- check_all(
-                  dataset,
-                  metadata,
-                  outcome_colname,
-                  method,
-                  scale_method, ### added this
-                  preprocess_methods,
-                  list(n_outer_folds, n_inner_folds), ### now checks the folds for both inner and outer
-                  perf_metric_function,
-                  perf_metric_name,
-                  group_colname,
-                  group_partitions,
-                  seed,
-                  hyperparameters,
-                  feature_importance_method ### added this
+                  dataset = dataset,
+                  metadata = metadata,
+                  outcome_colname = outcome_colname,
+                  method = method,
+                  scale_method = scale_method, ### added this
+                  preprocess_methods = preprocess_methods,
+                  kfold = list(n_outer_folds, n_inner_folds), ### now checks the folds for both inner and outer
+                  perf_metric_function = perf_metric_function,
+                  perf_metric_name = perf_metric_name,
+                  group_colname = group_colname,
+                  ### removed group_partitions
+                  seed = seed,
+                  hyperparameters = hyperparameters,
+                  feature_importance_method = feature_importance_method ### added this
                 )
 
     ### added below
@@ -243,6 +243,7 @@ run_ml_nestedcv <-
         corrFunList = corrFunList,
         outcome_type = outcome_type,
         class_probs = class_probs,
+        class_weight = class_weight,
         outcome_colname = outcome_colname,
 
         out_fold = out_fold,
@@ -256,8 +257,7 @@ run_ml_nestedcv <-
         cv_times = cv_times,
 
         filter_features = filter_features,
-        filterFunList = filterFunList,
-        grouped_feat = grouped_feat,
+        filterFunList = filterFunList, ### removed grouped_feat (redundant)
 
         threads = threads,
         seed = seed)
@@ -297,51 +297,49 @@ run_ml_nestedcv <-
     ### @feature_importance_endoR.R -> Function-1
     ### @feature_importance_permuted.R -> Function-1 to Function-6
     if (find_feature_importance) {
-      if (feature_importance_method == "endoR") {
-        message("Performing feature importance analysis using endoR")
-        # Feature importance analysis and plot
-        ### @feature_importance_endoR.R -> Function-1
-        if (method == "rf" | method == "customrf") {
-          model_type = "random forest"
-        } else if (method == "xgbTree") {
-          model_type = "xgboost"
-        } else {
-          model_type = NULL
-        }
-        if (!is.null(model_type)) {
-          feat_imp = feature_importance_endoR(
-            trained_model = final_fit,
-            method = model_type,
-            train_data = dataset,
-            train_metadata = metadata,
-            outcome_colname = outcome_colname,
-            jobs = threads
-          )
-        } else {
-          message("Skipping feature importance analysis as ML method is not supported by endoR.")
-          feat_imp = list("feature_importance_out" = "Skipped feature importance analysis",
-                          "feature_importance_plot" = "Skipped feature importance plot")
-        }
-      }
+      # if (feature_importance_method == "endoR") {
+      #   message("Performing feature importance analysis using endoR")
+      #   # Feature importance analysis and plot
+      #   ### @feature_importance_endoR.R -> Function-1
+      #   if (method == "rf" | method == "customrf") {
+      #     model_type = "random forest"
+      #   } else if (method == "xgbTree") {
+      #     model_type = "xgboost"
+      #   } else {
+      #     model_type = NULL
+      #   }
+      #   if (!is.null(model_type)) {
+      #     feat_imp = feature_importance_endoR(
+      #       trained_model = final_fit,
+      #       method = model_type,
+      #       train_data = dataset,
+      #       train_metadata = metadata,
+      #       outcome_colname = outcome_colname,
+      #       jobs = threads
+      #     )
+      #   } else {
+      #     message("Skipping feature importance analysis as ML method is not supported by endoR.")
+      #     feat_imp = list("feature_importance_out" = "Skipped feature importance analysis",
+      #                     "feature_importance_plot" = "Skipped feature importance plot")
+      #   }
+      # }
 
-      if (feature_importance_method == "permutation") {
-        message("Performing feature importance analysis using permutation")
-        # Feature importance analysis and plot
-        ### @feature_importance_permuted.R -> Function-1 to Function-6
-          feat_imp = feature_importance_permuted(
-            trained_model = final_fit,
-            test_data = dataset,
-            test_metadata = metadata,
-            outcome_colname = outcome_colname,
-            perf_metric_function = perf_metric_function,
-            perf_metric_name = perf_metric_name,
-            class_probs = class_probs,
-            method = method,
-            grouped_features_list = NULL,
-            seed = seed,
-            nperms = 100,
-            threads = threads)
-      }
+      message("Performing feature importance analysis using permutation")
+      # Feature importance analysis and plot
+      ### @feature_importance_permuted.R -> Function-1 to Function-6
+        feat_imp = feature_importance_main(
+          trained_model = final_fit,
+          test_data = dataset,
+          test_metadata = metadata,
+          outcome_colname = outcome_colname,
+          perf_metric_function = perf_metric_function,
+          perf_metric_name = perf_metric_name,
+          class_probs = class_probs,
+          method = method,
+          grouped_features_list = NULL,
+          seed = seed,
+          nperms = 100,
+          threads = threads)
     } else {
       message("Skipping feature importance analysis.")
       feat_imp = list("feature_importance_out" = "Skipped feature importance analysis",

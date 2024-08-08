@@ -1,51 +1,27 @@
 ### Function-1 ###
-#' Get feature importance using the permutation method
+#' Get feature importance using the selected method
 #' @noRd
-feature_importance_permuted <- function(trained_model, test_data, test_metadata,
-                                        outcome_colname, perf_metric_function,
-                                        perf_metric_name, performance_table, class_probs, method,
-                                        grouped_features_list = NULL, seed = NULL,
-                                        nperms = 100, threads = 1) { ### removed grouped_features_list argument
+feature_importance_main <- function(feature_importance_method, trained_model, test_data, test_metadata,
+                                    outcome_colname, perf_metric_function,
+                                    perf_metric_name, performance_table, class_probs, method,
+                                    grouped_features_list = NULL, seed = NULL,
+                                    nperms = 100, threads = 1) {
 
-  grouped_features_list <- colnames(test_data) ### removed if grouped_features_list is null
-  test_perf_value <- performance_table[[perf_metric_name]][[2]] # this is the same as calc_perf_metric
-  nsteps <- length(grouped_features_list) ### changed nsteps so it doesn't include nperms
-  #progbar <- NULL # uncomment if you do not want a progress bar
-  progbar <- progressr::progressor(
-    steps = nsteps,
-    message = "Feature importance"
-  )
-
-  future::plan(future::multicore, workers = threads)
-  imps <- future.apply::future_lapply(grouped_features_list, function(feat) { # future lapply allows for multicore usage, lappy doesn't
-    result <- find_permuted_perf_metric(
-      test_data,
-      test_metadata,
-      trained_model,
-      outcome_colname,
-      perf_metric_function,
-      perf_metric_name,
-      class_probs,
-      feat,
-      test_perf_value,
-      nperms = nperms,
-      alpha = 0.05)
-    pbtick(progbar) ### switched the position of progbar so it updates on every feature rather than permutation
-    return(result)
-  }, future.seed = seed) %>%
-    dplyr::bind_rows()
-  return(as.data.frame(imps) %>%
-    dplyr::mutate(
-      feat = factor(grouped_features_list),
-      method = method,
-      perf_metric_name = perf_metric_name,
-      seed = seed
-    ) %>%
-    dplyr::select(feat, dplyr::everything()) %>%
-    dplyr::arrange(pvalue)
-  )
+  feature_importance = list()
+  if ("permutation" %in% feature_importance_method) {
+    message("Performing feature importance analysis using permutation")
+    # Feature importance analysis and plot
+    ### @feature_importance.R -> Function-1
+    feature_importance[["Permutation"]] <- with_progress(feature_importance_permuted(
+      trained_model, test_data, test_metadata, outcome_colname, perf_metric_function, perf_metric_name, performance_tbl,
+      class_probs, method, grouped_features_list, seed, nperms, threads))
+  }
+  if ("embedded" %in% feature_importance_method) {
+    message("Performing feature importance analysis using embedded methods")
+    feature_importance[["Embedded"]] <- feature_importance_embedded(trained_model, feature_importnace_method, test_data)
+  }
+  return(feature_importance)
 }
-
 
 
 ### Function-2 ###
@@ -133,34 +109,57 @@ pbtick <- function(pb, message = NULL) {
 }
 
 
-### Function-1 ###
-#' Get feature importance using the selected method
+### Function-7 ###
+#' Get feature importance using the permutation method
 #' @noRd
-feature_importance_main <- function(feature_importance_method, trained_model, test_data, test_metadata,
-                        outcome_colname, perf_metric_function,
-                        perf_metric_name, performance_table, class_probs, method,
-                        grouped_features_list = NULL, seed = NULL,
-                        nperms = 100, threads = 1) {
+feature_importance_permuted <- function(trained_model, test_data, test_metadata,
+                                        outcome_colname, perf_metric_function,
+                                        perf_metric_name, performance_table, class_probs, method,
+                                        grouped_features_list = NULL, seed = NULL,
+                                        nperms = 100, threads = 1) { ### removed grouped_features_list argument
 
-  feature_importance = list()
-  if ("permutation" %in% feature_importance_method) {
-    message("Performing feature importance analysis using permutation")
-    # Feature importance analysis and plot
-    ### @feature_importance.R -> Function-1
-    feature_importance[["Permutation"]] <- with_progress(feature_importance_permuted(
-      trained_model, test_data, test_metadata, outcome_colname, perf_metric_function, perf_metric_name, performance_tbl,
-      class_probs, method, grouped_features_list, seed, nperms, threads))
-  }
-  if ("embedded" %in% feature_importance_method) {
-    message("Performing feature importance analysis using embedded methods")
-    feature_importance[["Embedded"]] <- feature_importance_embedded(trained_model, feature_importnace_method, test_data)
-  }
-  return(feature_importance)
+  grouped_features_list <- colnames(test_data) ### removed if grouped_features_list is null
+  test_perf_value <- performance_table[[perf_metric_name]][[2]] # this is the same as calc_perf_metric
+  nsteps <- length(grouped_features_list) ### changed nsteps so it doesn't include nperms
+  #progbar <- NULL # uncomment if you do not want a progress bar
+  progbar <- progressr::progressor(
+    steps = nsteps,
+    message = "Feature importance"
+  )
+
+  future::plan(future::multicore, workers = threads)
+  imps <- future.apply::future_lapply(grouped_features_list, function(feat) { # future lapply allows for multicore usage, lappy doesn't
+    result <- find_permuted_perf_metric(
+      test_data,
+      test_metadata,
+      trained_model,
+      outcome_colname,
+      perf_metric_function,
+      perf_metric_name,
+      class_probs,
+      feat,
+      test_perf_value,
+      nperms = nperms,
+      alpha = 0.05)
+    pbtick(progbar) ### switched the position of progbar so it updates on every feature rather than permutation
+    return(result)
+  }, future.seed = seed) %>%
+    dplyr::bind_rows()
+  return(as.data.frame(imps) %>%
+           dplyr::mutate(
+             feat = factor(grouped_features_list),
+             method = method,
+             perf_metric_name = perf_metric_name,
+             seed = seed
+           ) %>%
+           dplyr::select(feat, dplyr::everything()) %>%
+           dplyr::arrange(pvalue)
+  )
 }
 
 
 ### Function-8 ###
-#' Get feature importance using the permutation method
+#' Get feature importance using the embedded method
 #' @noRd
 feature_importance_embedded <- function(trained_model, feature_importnace_method, test_data) {
   final_model = trained_model$finalModel
