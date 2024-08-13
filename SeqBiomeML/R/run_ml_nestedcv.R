@@ -200,6 +200,18 @@ run_ml_nestedcv <-
     class_probs <- outcome_type != "continuous"
 
 
+    # Get performance metric function
+    ### @performance.R -> Function-2 and Function-3
+    if (is.null(perf_metric_function)) {
+      perf_metric_function <- get_perf_metric_fn(outcome_type)
+    }
+
+    # Get performance metric name for cross-validation.
+    if (is.null(perf_metric_name)) {
+      perf_metric_name <- get_perf_metric_name(outcome_type)
+    }
+
+
     # Get indices to split dataset into train
     ### @define_folds.R -> Function-1 to Function-3
     if (is.null(outer_folds)) {
@@ -265,33 +277,15 @@ run_ml_nestedcv <-
     ), mc.cores = jobs, mc.allow.recursive = FALSE)
     names(outer_res) <- paste0("Fold", seq(1, length(outer_res)))
 
-
-    message("Fitting final single model using best tuned parameters")
-    # Finalise bestTune params and Fit final model
+    # Produces the final model
     ### @performance.R -> Function-6
-    bestTunes <- lapply(outer_res, function(i) i$trained_model$bestTune) %>%
-      dplyr::bind_rows() %>%
-      dplyr::mutate("Fold" = paste0("Fold", row.names(.))) %>%
-      tibble::column_to_rownames("Fold")
-    finalTune <- finaliseTune(bestTunes) # selects the optimal hyperparameters
-    message("Final tuned parameter(s) are...")
-    print(finalTune, digits = 2L, print.gap = 2L, row.names = FALSE)
+    median_fold <- median_model(outer_res, perf_metric_name)
 
-
-    # Fit final single model using optimized parameters
-    fitControl <- caret::trainControl(
-      method = "none", number = NA, repeats = NA,
-      index = NULL, classProbs = class_probs,
-      savePredictions = TRUE, seeds = seed
-    )
-
-    final_fit <- caret::train(
-      x = dataset,
-      y = (metadata %>% dplyr::pull(outcome_colname)),
-      method = if(!grepl("custom", method)) method else custom_method_grid(method),
-      trControl = fitControl,
-      tuneGrid = finalTune
-    )
+      final_fit <- median_fold[["trained_model"]]
+      test_data <- median_fold[["test_data"]]
+      test_metadata <- median_fold[["test_metadata"]]
+      performance_tbl <- median_fold[["performance"]]
+      message("The final performance is ", round(performance_tbl[[perf_metric_name]][2], 3))
 
     # Feature importance analysis
     ### @feature_importance_endoR.R -> Function-1
@@ -328,12 +322,14 @@ run_ml_nestedcv <-
       # Feature importance analysis and plot
       ### @feature_importance_permuted.R -> Function-1 to Function-6
         feat_imp = feature_importance_main(
+          feature_importance_method = feature_importance_method,
           trained_model = final_fit,
           test_data = dataset,
           test_metadata = metadata,
           outcome_colname = outcome_colname,
           perf_metric_function = perf_metric_function,
           perf_metric_name = perf_metric_name,
+          performance_table = performance_tbl,
           class_probs = class_probs,
           method = method,
           grouped_features_list = NULL,
@@ -350,10 +346,9 @@ run_ml_nestedcv <-
     # return
     return(
       list(
+        "final_model" = median_fold,
         "outer_result" = outer_res,
         "outer_folds" = outer_folds,
-        "finalTune" = finalTune,
-        "final_model" = final_fit,
         "feature_importance" = feat_imp
       )
     )

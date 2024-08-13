@@ -25,7 +25,11 @@ Imports:
     pROC,
     viridis,
     endoR,
-    data.table
+    data.table,
+    mRMRe,
+    glmnet,
+    Boruta,
+    progressr
 Suggests:
     assertthat,
     doFuture,
@@ -39,7 +43,6 @@ Suggests:
     knitr,
     purrr,
     progress,
-    progressr,
     rmarkdown
 VignetteBuilder: knitr
 Encoding: UTF-8
