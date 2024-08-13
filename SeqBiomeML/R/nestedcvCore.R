@@ -102,18 +102,6 @@ nestedcvCore <- function(
   }
 
 
-  # Get performance metric function
-  ### @performance.R -> Function-2 and Function-3
-  if (is.null(perf_metric_function)) {
-    perf_metric_function <- get_perf_metric_fn(outcome_type)
-  }
-
-  # Get performance metric name for cross-validation.
-  if (is.null(perf_metric_name)) {
-    perf_metric_name <- get_perf_metric_name(outcome_type)
-  }
-
-
   # Define cross-validation scheme and training parameters
   ### @cross_val.R -> Function-1 to Function-4
   cross_val <- define_cv_nested(

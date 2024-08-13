@@ -54,7 +54,7 @@ out[[7]]
 
 
 ```{r}
-out1 <- run_ml_nestedcv(comp_data, S_meta, method = "rf", outcome_colname = "ParticipantType", group_colname = "SubjectID", scale_method = list("clr", "pseudo", 1), preprocess_methods = c("nzv"), corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE), filter_features = T, filterFunList = list(test = "mrmr_filter", n = 100), outer_folds = NULL, resamp_method = "cv", n_outer_folds = 3, n_inner_folds = 5, cv_times = 10, training_frac = 0.80, hyperparameters = NULL, cross_val = NULL, perf_metric_function = NULL, perf_metric_name = NULL, class_weight = FALSE, find_feature_importance = FALSE, feature_importance_method = "permutation", jobs = 1, threads = 1, seed = 123)
+out1 <- run_ml_nestedcv(comp_data, S_meta, method = "rf", outcome_colname = "ParticipantType", group_colname = "SubjectID", scale_method = list("clr", "pseudo", 1), preprocess_methods = c("nzv"), corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE), filter_features = T, filterFunList = list(test = "mrmr_filter", n = 100), outer_folds = NULL, resamp_method = "cv", n_outer_folds = 5, n_inner_folds = 5, cv_times = 10, training_frac = 0.80, hyperparameters = NULL, cross_val = NULL, perf_metric_function = NULL, perf_metric_name = NULL, class_weight = FALSE, find_feature_importance = FALSE, feature_importance_method = "permutation", jobs = 1, threads = 1, seed = 0)
 
 lapply(out[[1]], function(x) x[[6]]) # to look at performance
 lapply(out[[1]], function(x) x[[7]]) # to look at plots
@@ -198,7 +198,7 @@ library(reticulate) # allows the use of python in R, it does work
 
 
 ```{r}
-]
+
 ```
 
 
@@ -206,7 +206,7 @@ library(reticulate) # allows the use of python in R, it does work
 groups = S_meta[["SubjectID"]]
 outcome_colname = "ParticipantType"
 dataset <- preprocess_samples(dataset = comp_data, scale_method = list("clr", "pseudo", 1))
-outer_folds <- define_outer_folds(metadata = S_meta, outcome_colname = outcome_colname, outer_fold = 5, groups = groups, seed = 123)
+outer_folds <- define_outer_folds(metadata = S_meta, outcome_colname = outcome_colname, outer_fold = 5, groups = groups, seed = 0)
 test <- parallel::mclapply(
   seq_along(outer_folds), 
   function(out_fold) {
@@ -303,10 +303,14 @@ obs <- factor(test[[4]][[3]][[outcome_colname]], levels = uniq_obs)
 if (class_probs) {
   pred_class <- factor(names(preds)[apply(preds, 1, which.max)], levels = uniq_obs)
   perf_met <- perf_metric_function(data.frame(obs = obs, pred = pred_class, preds), lev = uniq_obs)
-}
-else {
+} else {
   perf_met <- perf_metric_function(data.frame(obs = obs, pred = preds), lev = uniq_obs)
 }
 return(perf_met)
+```
+
+
+```{r}
+
 ```
 

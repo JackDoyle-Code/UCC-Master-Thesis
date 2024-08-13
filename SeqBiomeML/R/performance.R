@@ -145,13 +145,14 @@ calc_perf_metrics <- function(test_data, test_metadata, trained_model, outcome_c
 
 ### Function-6 ###
 #' @noRd
-#' Get best tune parameters from inner folds
-finaliseTune <- function(x) {
-  fintune <- lapply(colnames(x), function(i) {
-    if (is.numeric(x[, i])) return(stats::median(x[, i]))
-    tab <- table(x[, i])
-    names(tab)[which.max(tab)]  # majority vote for factors
-  })
-  names(fintune) <- colnames(x)
-  data.frame(fintune, check.names = FALSE)
+#' Get best model from outer folds
+median_model <- function(outer_fold_results, perf_metric_name) {
+  # produces a data frame indicating the selected performance metric and the associated fold
+  all_perf = lapply(outer_fold_results, function(x) x$performance[2, perf_metric_name]) %>%
+    dplyr::bind_rows() %>%
+    dplyr::mutate("Fold" = paste0("Fold", row.names(.)))
+  # selects the fold with the median performance value
+  median_row = all_perf[all_perf[[perf_metric_name]] == median(all_perf[[perf_metric_name]]), ]
+  median_fold = outer_fold_results[[median_row$Fold]]
+  return(median_fold)
 }

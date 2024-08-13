@@ -135,6 +135,8 @@ apply_conditions <- function(cb_grid) {
   out = cb_grid[!(cb_grid$scale_method == "clr" & is.na(cb_grid$impute_method)), ]
   # removes rows that use rclr with imputation methods other than null
   out = out[!(out$scale_method == "rclr" & !is.na(out$impute_method)), ]
+  # removes rows that have filter_feature as F and have different fs_methods
+  out = out[!(out$filter_features == F & (out$fs_method != "glm_filter")), ]
   # removes rows that don't use pseudo and use min or 1
   out = out[!(out$impute_method %in% c("CZM", NA) & (out$val == 1)), ]
   # reindexes the rows
@@ -181,7 +183,7 @@ pipeline_iteration_unnested <- function(cb_grid, dataset, metadata, outcome_coln
 
 ```{r}
 # iterate through each set of variables in the combination grid and runs the ML pipeline on them
-pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colname = NULL, group_colname = NULL) {
+pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colname = NULL, group_colname = NULL, seed = 0) {
   out <- apply(cb_grid, 1, function(x) 
     run_ml_cv(
       dataset = dataset,
@@ -196,7 +198,7 @@ pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colnam
       filterFunList = list(test = x$fs),
       outer_folds = NULL,
       resamp_method = "repeatedcv", 
-      n_outer_folds = 10,
+      n_outer_folds = 5,
       n_inner_folds = 10,
       cv_times = 10,
       training_frac = 0.80,
@@ -210,7 +212,7 @@ pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colnam
       feature_importance_method = "permutation",
       jobs = 1,
       threads = 1,
-      seed = 0))
+      seed = seed))
   return(out)
 }
 ```
@@ -244,5 +246,29 @@ combinations[1:10,]
 run1_30[[4]]
 run1_50_60[[4]]
 
+```
+
+
+```{r}
+new_comb <- apply_conditions(combinations)
+# test = new_comb[c(22, 78, 104, 132, 195, 245, 301, 352, 414, 465), ]
+run41_46 <- pipeline_iteration_nested(new_comb[41:46, ], dataset = comp_data, metadata = S_meta, outcome_colname = "ParticipantType", group_colname = "SubjectID", seed = 0)
+
+res35_40 = do.call(rbind, lapply(run35_40, function(x) {
+  perf = x[[7]]
+  perf_row = perf[2, 2:15]
+  clean_perf = round(perf_row, 3)
+  return(clean_perf)
+}))
+
+new_comb[11:21, ]
+```
+
+
+```{r}
+new_comb[11:15, ]
+res1_40 = rbind(res1_10, res11_15, res16_21, res22_27, res28_34, res35_40)
+rm(test)
+run1_40 = c(run1_10, run11_15, run16_21, run22_27, run28_34, run35_40)
 ```
 
