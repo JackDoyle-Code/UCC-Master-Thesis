@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r}
-in_path = "C:/Users/jacko/Documents/SeqBiomeML/SeqBiomeML/R/"
+in_path = "C:/Users/student/Documents/SeqBiomeML-main/SeqBiomeML/R/"
 # in_path = "C:/Users/jacko/Downloads/SeqBiomeML_latest/SeqBiomeML/R/"
 file_path <- list.files(in_path, full.names = TRUE)
 for(f_path in file_path) { source(f_path) }
@@ -15,13 +15,13 @@ for(f_path in file_path) { source(f_path) }
 
 ```{r}
 # Reading in the Data
-S_meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_metadata.csv")
-S_rsv = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_rsv.csv")
-S_species = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_species.csv")
-S_genus = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_species.csv")
-Meta_meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_metadata.csv")
-Meta_species = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_species.csv")
-Meta_EC = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_EC.csv")
+S_meta = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/16S_metadata.csv")
+S_rsv = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/16S_rsv.csv")
+S_species = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/16S_species.csv")
+S_genus = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/16S_species.csv")
+Meta_meta = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/Meta_metadata.csv")
+Meta_species = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/Meta_species.csv")
+Meta_EC = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/Meta_EC.csv")
 
 # Metadata
 S_meta <- S_meta[S_meta$INCLUDE == c("YES"), ] # Only selects samples that are supposed to be included for analysis
@@ -53,7 +53,7 @@ Meta_EC = new_Meta_data[["Meta_EC"]]
 
 ```{r}
 # Read DESCRIPTION file to extract Imports
-description_file <- "C:/Users/jacko/Downloads/SeqBiomeML_latest/SeqBiomeML/DESCRIPTION"
+description_file <- "C:/Users/student/Documents/SeqBiomeML-main/SeqBiomeML/DESCRIPTION"
 description <- readLines(description_file)
 pkg = description[13:28]
 pkg = pkg[-15]
@@ -185,7 +185,7 @@ pipeline_iteration_unnested <- function(cb_grid, dataset, metadata, outcome_coln
 # iterate through each set of variables in the combination grid and runs the ML pipeline on them
 pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colname = NULL, group_colname = NULL, seed = 0) {
   out <- apply(cb_grid, 1, function(x) 
-    run_ml_cv(
+    run_ml_nestedcv(
       dataset = dataset,
       metadata = metadata,
       method = x$method,
@@ -251,17 +251,40 @@ run1_50_60[[4]]
 
 ```{r}
 new_comb <- apply_conditions(combinations)
-# test = new_comb[c(22, 78, 104, 132, 195, 245, 301, 352, 414, 465), ]
-run41_46 <- pipeline_iteration_nested(new_comb[41:46, ], dataset = comp_data, metadata = S_meta, outcome_colname = "ParticipantType", group_colname = "SubjectID", seed = 0)
+```
 
-res35_40 = do.call(rbind, lapply(run35_40, function(x) {
+
+```{r}
+comp_data <- S_species[rownames(S_species) %in% S_meta$SampleID, ]
+
+S_species1_288_run <- pipeline_iteration_nested(new_comb[1, ], dataset = comp_data, metadata = S_meta, outcome_colname = "ParticipantType", group_colname = "SubjectID", seed = 0)
+
+S_species1_288_res = do.call(rbind, lapply(S_species1_288_run, function(x) {
+  perf = x[[1]][[6]]
+  perf_row = perf[2, 3:16]
+  clean_perf = round(perf_row, 3)
+  return(clean_perf)
+}))
+
+save(S_species1_288_res, S_species1_288_run, file = "s_species1_288.RData")
+
+S_species1_288_run[[1]][[1]][[6]][3:16]
+```
+
+
+```{r}
+comp_data <- S_genus[rownames(S_genus) %in% S_meta$SampleID, ]
+
+S_genus1_288_run <- pipeline_iteration_nested(new_comb[1:288, ], dataset = comp_data, metadata = S_meta, outcome_colname = "ParticipantType", group_colname = "SubjectID", seed = 0)
+
+S_genus1_288_res = do.call(rbind, lapply(S_genus1_288_run, function(x) {
   perf = x[[7]]
   perf_row = perf[2, 2:15]
   clean_perf = round(perf_row, 3)
   return(clean_perf)
 }))
 
-new_comb[11:21, ]
+save(S_genus1_288_res, S_genus1_288_run, file = "s_genus1_288.RData")
 ```
 
 
