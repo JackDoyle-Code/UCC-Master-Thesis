@@ -1,0 +1,162 @@
+in_path = "C:/Users/jacko/Documents/SeqBiomeML/SeqBiomeML/R/" ######## change this #############
+file_path <- list.files(in_path, full.names = TRUE)
+for(f_path in file_path) { source(f_path) }
+
+
+# Reading in the Data
+S_meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_metadata.csv") ######## change this ##########
+S_rsv = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_rsv.csv")
+S_species = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_species.csv")
+S_genus = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_species.csv")
+Meta_meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_metadata.csv")
+Meta_species = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_species.csv")
+Meta_EC = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_EC.csv")
+
+# Metadata
+S_meta <- S_meta[S_meta$INCLUDE == c("YES"), ] # Only selects samples that are supposed to be included for analysis
+Meta_meta <- Meta_meta[, 1:14] # removes all blank columns
+Meta_meta <- Meta_meta[Meta_meta$INCLUDE == c("YES"), ] # Only selects samples that are supposed to be included for analysis
+
+# Formats the count table so that they are applicable with the functions
+format_data <- function(dataset, metadata) {
+  rownames(dataset) = dataset$taxa # renames the rows as the taxa column
+  dataset = dataset[, -1] # removes taxa column
+  new_dataset = as.data.frame(apply(dataset, 1, as.numeric)) # switches samples to rows and features to columns and makes them numeric
+  rownames(new_dataset) = colnames(dataset) # renames the rows
+  new_dataset = new_dataset[rownames(new_dataset) %in% metadata$SampleID, ] # sets all values as numeric
+  return(dataset = new_dataset)
+}
+
+# Count Data
+S_data <- list(S_rsv = S_rsv, S_species = S_species, S_genus = S_genus)
+Meta_data <- list(Meta_species = Meta_species, Meta_EC = Meta_EC)
+new_S_data <- lapply(S_data, function(x) format_data(x, S_meta))
+new_Meta_data <- lapply(Meta_data, function(x) format_data(x, Meta_meta))
+S_rsv = new_S_data[["S_rsv"]]
+S_species = new_S_data[["S_species"]]
+S_genus = new_S_data[["S_genus"]]
+Meta_species = new_Meta_data[["Meta_species"]]
+Meta_EC = new_Meta_data[["Meta_EC"]]
+
+
+# Read DESCRIPTION file to extract Imports
+description_file <- "C:/Users/jacko/Documents/SeqBiomeML/SeqBiomeML/DESCRIPTION" ######### Change this ##########
+description <- readLines(description_file)
+pkg = description[13:33]
+pkg = pkg[-15]
+
+for (i in pkg) {
+  x = sub(",", "", i)
+  y = trimws(x)
+  if (!requireNamespace(y, quietly = TRUE)) {
+    install.packages(y)
+  }
+  library(y, character.only = T)
+}
+
+
+# Makes the data binary (either control or Athlete)
+S_meta[S_meta$ParticipantType != "control", 2] = "Athlete"
+Meta_meta[Meta_meta$Group != "Control", 3] = "Athlete"
+
+
+# Define Variables
+method = c("rf", "kknn", "glmnet", "svmRadial") # rpart2 and xgbTree can be included
+scale_method = c("clr", "tss", "rclr")
+impute_method = c("pseudo", 'CZM', NA) # GBM, BL and SQ can be included
+val = c(1, "min")
+preprocess_methods = c("nzv", list(c("center","scale")), list(c("nzv", "center", "scale")))
+filter_features = c(T, F)
+fs_method = c("mrmr_filter", "boruta_filter", "glm_filter", "rfe_filter") 
+
+
+# Define Combinations
+set.seed(0)
+combinations <- expand.grid(
+  method = method,
+  scale_method = scale_method,
+  impute_method = impute_method,
+  val = val,
+  preprocess_methods = preprocess_methods,
+  filter_features = filter_features,
+  fs_method = fs_method
+)
+
+
+# remove variables that are not compatible with each other
+apply_conditions <- function(cb_grid) {
+  # removes rows that use clr with null imputation method
+  out = cb_grid[!(cb_grid$scale_method == "clr" & is.na(cb_grid$impute_method)), ]
+  # removes rows that use rclr with imputation methods other than null
+  out = out[!(out$scale_method == "rclr" & !is.na(out$impute_method)), ]
+  # removes rows that have filter_feature as F and have different fs_methods
+  out = out[!(out$filter_features == F & (out$fs_method != "glm_filter")), ]
+  # removes rows that don't use pseudo and use min or 1
+  out = out[!(out$impute_method %in% c("CZM", NA) & (out$val == 1)), ]
+  # reindexes the rows
+  rownames(out) = seq(1, nrow(out))
+  return(out)
+}
+
+
+# iterate through each set of variables in the combination grid and runs the ML pipeline on them
+pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colname = NULL, group_colname = NULL, seed = 0) {
+  out <- apply(cb_grid, 1, function(x) 
+    run_ml_nestedcv(
+      dataset = dataset,
+      metadata = metadata,
+      method = x$method,
+      outcome_colname = outcome_colname,
+      group_colname = group_colname,
+      scale_method = list(x$scale_method, x$impute_method, x$val),
+      preprocess_methods = x$preprocess_methods,
+      corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE),
+      filter_features = x$filter_features,
+      filterFunList = list(test = x$fs),
+      outer_folds = NULL,
+      resamp_method = "repeatedcv", 
+      n_outer_folds = 5,
+      n_inner_folds = 10,
+      cv_times = 10,
+      training_frac = 0.80,
+      hyperparameters = NULL,
+      cross_val = NULL,
+      perf_metric_function = NULL,
+      perf_metric_name = NULL,
+      group_partitions = NULL,
+      class_weight = F,
+      find_feature_importance = FALSE,
+      feature_importance_method = "permutation",
+      jobs = 1,
+      threads = 1,
+      seed = seed))
+  return(out)
+}
+
+
+# Calling the functions
+new_comb <- apply_conditions(combinations)
+comp_data <- S_rsv[rownames(S_rsv) %in% S_meta$SampleID, ]
+S_rsv1_288_run <- pipeline_iteration_nested(new_comb[1:288, ], dataset = comp_data, metadata = S_meta, outcome_colname = "ParticipantType", group_colname = "SubjectID", seed = 0)
+S_rsv1_288_res = do.call(rbind, lapply(S_rsv1_288_run, function(x) {
+  perf = x[[1]][[6]]
+  perf_row = perf[2, 3:16]
+  clean_perf = round(perf_row, 3)
+  return(clean_perf)
+}))
+
+# saves the models and their performance results
+save(S_rsv1_288_res, S_rsv1_288_run, file = "s_rsv1_288.RData")
+
+
+comp_data <- Meta_EC[rownames(Meta_EC) %in% Meta_meta$SampleID, ]
+Meta_EC1_288_run <- pipeline_iteration_nested(new_comb[1:288, ], dataset = comp_data, metadata = S_meta, outcome_colname = "Group", group_colname = "SubjectID", seed = 0)
+Meta_EC1_288_res = do.call(rbind, lapply(Meta_EC1_288_run, function(x) {
+  perf = x[[1]][[6]]
+  perf_row = perf[2, 3:16]
+  clean_perf = round(perf_row, 3)
+  return(clean_perf)
+}))
+
+# saves the models and their performance results
+save(Meta_EC1_288_res, Meta_EC1_288_run, file = "Meta_EC1_288.RData")

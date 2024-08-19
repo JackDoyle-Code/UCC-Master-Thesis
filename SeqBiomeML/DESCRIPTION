@@ -29,10 +29,10 @@ Imports:
     mRMRe,
     glmnet,
     Boruta,
-    progressr
+    progressr,
+    doFuture
 Suggests:
     assertthat,
-    doFuture,
     foreach,
     future,
     future.apply,
