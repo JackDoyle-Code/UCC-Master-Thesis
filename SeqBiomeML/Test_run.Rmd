@@ -6,7 +6,6 @@ date: "2024-06-05"
 
 ```{r}
 in_path = "C:/Users/jacko/Documents/SeqBiomeML/SeqBiomeML/R/"
-# in_path = "C:/Users/jacko/Downloads/SeqBiomeML_latest/SeqBiomeML/R/"
 file_path <- list.files(in_path, full.names = TRUE)
 for(f_path in file_path) { source(f_path) }
 ```
@@ -54,7 +53,7 @@ out[[7]]
 
 
 ```{r}
-out1 <- run_ml_nestedcv(comp_data, S_meta, method = "rf", outcome_colname = "ParticipantType", group_colname = "SubjectID", scale_method = list("clr", "pseudo", 1), preprocess_methods = c("nzv"), corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE), filter_features = T, filterFunList = list(test = "mrmr_filter", n = 100), outer_folds = NULL, resamp_method = "cv", n_outer_folds = 5, n_inner_folds = 5, cv_times = 10, training_frac = 0.80, hyperparameters = NULL, cross_val = NULL, perf_metric_function = NULL, perf_metric_name = NULL, class_weight = FALSE, find_feature_importance = FALSE, feature_importance_method = "permutation", jobs = 1, threads = 1, seed = 0)
+out <- run_ml_nestedcv(comp_data, S_meta, method = "rf", outcome_colname = "ParticipantType", group_colname = "SubjectID", scale_method = list("clr", "pseudo", 1), preprocess_methods = c("nzv"), corrFunList = list(corr_method = "spearman", corr_thresh = 1, group_neg_corr = TRUE), filter_features = T, filterFunList = list(test = "rfe_filter"), outer_folds = NULL, resamp_method = "repeatedcv", n_outer_folds = 5, n_inner_folds = 10, cv_times = 10, training_frac = 0.80, hyperparameters = NULL, cross_val = NULL, perf_metric_function = NULL, perf_metric_name = NULL, class_weight = FALSE, find_feature_importance = FALSE, feature_importance_method = "permutation", jobs = 1, threads = 1, seed = 0)
 
 lapply(out[[1]], function(x) x[[6]]) # to look at performance
 lapply(out[[1]], function(x) x[[7]]) # to look at plots

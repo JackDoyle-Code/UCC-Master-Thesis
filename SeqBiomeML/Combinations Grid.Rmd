@@ -6,8 +6,7 @@ output: html_document
 ---
 
 ```{r}
-in_path = "C:/Users/student/Documents/SeqBiomeML-main/SeqBiomeML/R/"
-# in_path = "C:/Users/jacko/Downloads/SeqBiomeML_latest/SeqBiomeML/R/"
+in_path = "C:/Users/jacko/Documents/SeqBiomeML/SeqBiomeML/R/"
 file_path <- list.files(in_path, full.names = TRUE)
 for(f_path in file_path) { source(f_path) }
 ```
@@ -15,13 +14,13 @@ for(f_path in file_path) { source(f_path) }
 
 ```{r}
 # Reading in the Data
-S_meta = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/16S_metadata.csv")
-S_rsv = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/16S_rsv.csv")
-S_species = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/16S_species.csv")
-S_genus = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/16S_species.csv")
-Meta_meta = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/Meta_metadata.csv")
-Meta_species = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/Meta_species.csv")
-Meta_EC = read.csv("C:/Users/student/Documents/SeqBiomeML-main/Data/Meta_EC.csv")
+S_meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_metadata.csv")
+S_rsv = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_rsv.csv")
+S_species = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_species.csv")
+S_genus = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_species.csv")
+Meta_meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_metadata.csv")
+Meta_species = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_species.csv")
+Meta_EC = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_EC.csv")
 
 # Metadata
 S_meta <- S_meta[S_meta$INCLUDE == c("YES"), ] # Only selects samples that are supposed to be included for analysis
@@ -53,9 +52,9 @@ Meta_EC = new_Meta_data[["Meta_EC"]]
 
 ```{r}
 # Read DESCRIPTION file to extract Imports
-description_file <- "C:/Users/student/Documents/SeqBiomeML-main/SeqBiomeML/DESCRIPTION"
+description_file <- "C:/Users/jacko/Documents/SeqBiomeML/SeqBiomeML/DESCRIPTION"
 description <- readLines(description_file)
-pkg = description[13:28]
+pkg = description[13:33]
 pkg = pkg[-15]
 
 for (i in pkg) {
@@ -257,7 +256,7 @@ new_comb <- apply_conditions(combinations)
 ```{r}
 comp_data <- S_species[rownames(S_species) %in% S_meta$SampleID, ]
 
-S_species1_288_run <- pipeline_iteration_nested(new_comb[1, ], dataset = comp_data, metadata = S_meta, outcome_colname = "ParticipantType", group_colname = "SubjectID", seed = 0)
+S_species1_288_run <- pipeline_iteration_nested(new_comb[c(1, 5, 9), ], dataset = comp_data, metadata = S_meta, outcome_colname = "ParticipantType", group_colname = "SubjectID", seed = 0)
 
 S_species1_288_res = do.call(rbind, lapply(S_species1_288_run, function(x) {
   perf = x[[1]][[6]]
@@ -267,8 +266,6 @@ S_species1_288_res = do.call(rbind, lapply(S_species1_288_run, function(x) {
 }))
 
 save(S_species1_288_res, S_species1_288_run, file = "s_species1_288.RData")
-
-S_species1_288_run[[1]][[1]][[6]][3:16]
 ```
 
 
@@ -289,9 +286,86 @@ save(S_genus1_288_res, S_genus1_288_run, file = "s_genus1_288.RData")
 
 
 ```{r}
-new_comb[11:15, ]
-res1_40 = rbind(res1_10, res11_15, res16_21, res22_27, res28_34, res35_40)
-rm(test)
-run1_40 = c(run1_10, run11_15, run16_21, run22_27, run28_34, run35_40)
+# After getting the results
+models = rownames(S_species1_288_res)
+test = cbind(models, S_species1_288_res)
+test = test[order(test$AUC, decreasing = T), ]
+
+top_models_names = head(test, 10)
+top_models = lapply(top_models_names$models, function(x) S_species1_288_run[[x]])
+names(top_models) = top_models_names$models
+
+testdata = sapply(top_models, function(x) colnames(x[[1]][[2]]))
+ploty = as.data.frame(sort(table(testdata), decreasing = T))
+
+get_feature_frequency <- function(freq_tbl, N) {
+  across_100 = freq_tbl[freq_tbl$Freq == N, ]
+  across_75 = freq_tbl[freq_tbl$Freq == round(N*0.75) & freq_tbl$Freq < N, ]
+  across_50 = freq_tbl[freq_tbl$Freq == round(N*0.50) & freq_tbl$Freq < round(N*0.75), ]
+  across_25 = freq_tbl[freq_tbl$Freq == round(N*0.25) & freq_tbl$Freq < round(N*0.50), ]
+  across_0 = freq_tbl[freq_tbl$Freq < round(N*0.25), ]
+  return(list("100%" = across_100, "75-99%" = across_75, "50-74%" = across_50, "25-75%" = across_25, "<25%" = across_0))
+}
+
+freq_out <- get_feature_frequency(ploty, 3)
+freq_data <- data.frame(Object = names(freq_out), Count = sapply(freq_out, nrow))
+freq_data$Object = factor(freq_data$Object, levels = unique(freq_data$Object))
+
+ggplot(freq_data, aes(x = Object, y = Count, fill = Object)) +  # Different colors for each bar
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), vjust = -0.5, size = 3.5) +  # Add labels above bars
+  labs(title = "Feature Coverage Across Models", x = "Percentage Coverage", y = "Number of Features", fill = "Percentage Coverage") +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8),
+    panel.border = element_rect(colour = "black", fill = NA),  # Adding axis borders
+    axis.line = element_line(colour = "black"),  # Adding axis lines
+    legend.position = "right",  # Adjust legend position
+    legend.title = element_text(size = 10), # Remove legend title for simplicity
+  ) +
+  scale_fill_viridis_d(option = "D", direction = 1) + # Apply colorblind-friendly palette
+  scale_y_continuous(breaks = seq(0, max(freq_data$Count) + 10, by = 10), expand = expansion(mult = c(0, 0.2)))  # Control y-axis breaks
+
+feat_imp = lapply(top_models, function(x) {
+  feature_importance_main(
+            feature_importance_method = "permutation",
+            trained_model = x[["final_model"]][["trained_model"]],
+            test_data = x[["final_model"]][["test_data"]],
+            test_metadata = x[["final_model"]][["test_metadata"]],
+            outcome_colname = "ParticipantType",
+            perf_metric_function = get_perf_metric_fn("binary"),
+            perf_metric_name = "AUC",
+            class_probs = T,
+            method = x[["final_model"]][["trained_model"]][["method"]],
+            seed = 0,
+            nperms = 100,
+            threads = 1,
+            performance_table = x[["final_model"]][["performance"]])
+})
+
+sig_features = lapply(feat_imp, function(x) x[[1]][x[[1]][["pvalue"]] <= 0.05, ])
+sig_features = do.call(rbind, lapply(feat_imp, function(x) x[[1]][x[[1]][["pvalue"]] <= 0.05, ]))
+
+all_sig_feat <- unique(sig_features$feat)
+sig_data <- ploty[ploty$testdata %in% all_sig_feat, ]
+
+ggplot(sig_data, aes(x = testdata, y = Freq)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +  # Flip coordinates for better readability with many features
+  labs(title = "Frequency of Signifcant Features Across Models", x = "Features", y = "Frequency") +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8),
+    panel.border = element_rect(colour = "black", fill = NA),  # Adding axis borders
+    axis.line = element_line(colour = "black"),  # Adding axis lines
+    legend.position = "right",  # Adjust legend position
+    legend.title = element_text(size = 10),
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2)))  # Control y-axis breaks
+
+feat_imp[[2]]$Permutation[order(feat_imp[[2]]$Permutation$perf_metric, decreasing = T), ]
+
+best_perf <- sig_features[order(sig_features$perf_metric_diff), ]
+top_10_perf <- best_perf[1:10, ]
 ```
 
