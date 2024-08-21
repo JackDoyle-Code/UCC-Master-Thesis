@@ -286,18 +286,25 @@ save(S_genus1_288_res, S_genus1_288_run, file = "s_genus1_288.RData")
 
 
 ```{r}
+model_res = S_species1_288_res
+model_run = S_species1_288_run
+
 # After getting the results
-models = rownames(S_species1_288_res)
-test = cbind(models, S_species1_288_res)
-test = test[order(test$AUC, decreasing = T), ]
+# orders the results by decreasing AUC value
+models = rownames(model_res)
+new_mod = cbind(models, model_res)
+ord_mod = ord_mod[order(new_mod$AUC, decreasing = T), ]
 
-top_models_names = head(test, 10)
-top_models = lapply(top_models_names$models, function(x) S_species1_288_run[[x]])
-names(top_models) = top_models_names$models
+# orders the models by decreasing AUC value
+order_models = lapply(ord_mod$models, function(x) model_run[[x]])
+names(order_models) = ord_mod$models
 
-testdata = sapply(top_models, function(x) colnames(x[[1]][[2]]))
-ploty = as.data.frame(sort(table(testdata), decreasing = T))
+# extracts the features used in the final models
+feat_data = sapply(order_models, function(x) colnames(x[[1]][[2]]))
+# converts the vector to a dataframe, with features and feature frequency across all models
+feat_freq = as.data.frame(sort(table(feat_data), decreasing = T))
 
+# Groups features by their percentage cover across all models
 get_feature_frequency <- function(freq_tbl, N) {
   across_100 = freq_tbl[freq_tbl$Freq == N, ]
   across_75 = freq_tbl[freq_tbl$Freq == round(N*0.75) & freq_tbl$Freq < N, ]
@@ -306,12 +313,14 @@ get_feature_frequency <- function(freq_tbl, N) {
   across_0 = freq_tbl[freq_tbl$Freq < round(N*0.25), ]
   return(list("100%" = across_100, "75-99%" = across_75, "50-74%" = across_50, "25-75%" = across_25, "<25%" = across_0))
 }
+freq_out <- get_feature_frequency(feat_freq, nrow(model_res))
 
-freq_out <- get_feature_frequency(ploty, 3)
-freq_data <- data.frame(Object = names(freq_out), Count = sapply(freq_out, nrow))
-freq_data$Object = factor(freq_data$Object, levels = unique(freq_data$Object))
+# returns the names of each group and the number of features in the group
+group_freq <- data.frame(Object = names(freq_out), Count = sapply(freq_out, nrow))
+group_freq$Object = factor(group_freq$Object, levels = unique(group_freq$Object))
 
-ggplot(freq_data, aes(x = Object, y = Count, fill = Object)) +  # Different colors for each bar
+# Plots each group and the number of features in each group
+ggplot(group_freq, aes(x = Object, y = Count, fill = Object)) +  # Different colors for each bar
   geom_bar(stat = "identity") +
   geom_text(aes(label = Count), vjust = -0.5, size = 3.5) +  # Add labels above bars
   labs(title = "Feature Coverage Across Models", x = "Percentage Coverage", y = "Number of Features", fill = "Percentage Coverage") +
@@ -324,9 +333,17 @@ ggplot(freq_data, aes(x = Object, y = Count, fill = Object)) +  # Different colo
     legend.title = element_text(size = 10), # Remove legend title for simplicity
   ) +
   scale_fill_viridis_d(option = "D", direction = 1) + # Apply colorblind-friendly palette
-  scale_y_continuous(breaks = seq(0, max(freq_data$Count) + 10, by = 10), expand = expansion(mult = c(0, 0.2)))  # Control y-axis breaks
+  scale_y_continuous(breaks = seq(0, max(group_freq$Count) + 10, by = 10), expand = expansion(mult = c(0, 0.2)))  # Control y-axis breaks
 
-feat_imp = lapply(top_models, function(x) {
+#
+#
+# The below function will get feature importance for all models. Consider subsetting it to the top 50
+#
+#
+
+
+# Gathers feature importance for each model
+feat_imp = lapply(order_models, function(x) {
   feature_importance_main(
             feature_importance_method = "permutation",
             trained_model = x[["final_model"]][["trained_model"]],
@@ -343,12 +360,19 @@ feat_imp = lapply(top_models, function(x) {
             performance_table = x[["final_model"]][["performance"]])
 })
 
+# Selects only features with a value of < 0.05 across all models
 sig_features = lapply(feat_imp, function(x) x[[1]][x[[1]][["pvalue"]] <= 0.05, ])
 sig_features = do.call(rbind, lapply(feat_imp, function(x) x[[1]][x[[1]][["pvalue"]] <= 0.05, ]))
 
-all_sig_feat <- unique(sig_features$feat)
-sig_data <- ploty[ploty$testdata %in% all_sig_feat, ]
+# produces a data frame of each significant feature and how many times it was found to be significant
+count_sig <- as.data.frame(sort(table(sig_features$feat), decreasing = T))
 
+# Gets the frequency of occurrence of all the significant feats
+all_sig_feat <- unique(sig_features$feat)
+sig_data <- feat_freq[feat_freq$feat_data %in% all_sig_feat, ]
+
+# plots the significant features and either the feature frequency of significance or occurrence across all models
+# Either sig_data or count_sig
 ggplot(sig_data, aes(x = testdata, y = Freq)) +
   geom_bar(stat = "identity") +
   coord_flip() +  # Flip coordinates for better readability with many features
@@ -361,11 +385,10 @@ ggplot(sig_data, aes(x = testdata, y = Freq)) +
     legend.position = "right",  # Adjust legend position
     legend.title = element_text(size = 10),
   ) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.2)))  # Control y-axis breaks
+  scale_y_continuous(limits = c(0, nrow(model_res)), expand = expansion(mult = c(0, 0.2)))  # Control y-axis breaks
 
-feat_imp[[2]]$Permutation[order(feat_imp[[2]]$Permutation$perf_metric, decreasing = T), ]
-
-best_perf <- sig_features[order(sig_features$perf_metric_diff), ]
-top_10_perf <- best_perf[1:10, ]
+# returns the best models sorted by pvalue
+best_perf <- sig_features[order(sig_features$pvalue), ] # pvalue can be replaced with a different metric
+top_10_perf <-head(best_perf, 10)
 ```
 
