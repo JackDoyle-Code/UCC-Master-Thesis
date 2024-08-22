@@ -310,6 +310,11 @@ return(perf_met)
 
 
 ```{r}
+load("../Data/g_results.RData")
 
+library(magick)
+plot1 = image_read("../Data/g_plot1.png")
+plot2 = image_read("../Data/g_plot2.png")
+plot3 = image_read("../Data/g_plot3.png")
 ```
 

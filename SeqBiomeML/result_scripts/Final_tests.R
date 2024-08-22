@@ -7,7 +7,7 @@ for(f_path in file_path) { source(f_path) }
 S_meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_metadata.csv") ######## change this ##########
 S_rsv = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_rsv.csv")
 S_species = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_species.csv")
-S_genus = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_species.csv")
+S_genus = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/16S_genus.csv")
 Meta_meta = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_metadata.csv")
 Meta_species = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_species.csv")
 Meta_EC = read.csv("C:/Users/jacko/Documents/SeqBiomeML/Data/Meta_EC.csv")
@@ -67,7 +67,7 @@ impute_method = c("pseudo", 'CZM', NA) # GBM, BL and SQ can be included
 val = c(1, "min")
 preprocess_methods = c("nzv", list(c("center","scale")), list(c("nzv", "center", "scale")))
 filter_features = c(T, F)
-fs_method = c("mrmr_filter", "boruta_filter", "glm_filter", "rfe_filter") 
+fs_method = c("mrmr_filter", "boruta_filter", "glm_filter", "rfe_filter")
 
 
 # Define Combinations
@@ -101,7 +101,9 @@ apply_conditions <- function(cb_grid) {
 
 # iterate through each set of variables in the combination grid and runs the ML pipeline on them
 pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colname = NULL, group_colname = NULL, seed = 0) {
-  out <- apply(cb_grid, 1, function(x) 
+  counter <- 1
+  out <- apply(cb_grid, 1, function(x) {
+    print(paste("Model:", counter))
     run_ml_nestedcv(
       dataset = dataset,
       metadata = metadata,
@@ -114,7 +116,7 @@ pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colnam
       filter_features = x$filter_features,
       filterFunList = list(test = x$fs),
       outer_folds = NULL,
-      resamp_method = "repeatedcv", 
+      resamp_method = "repeatedcv",
       n_outer_folds = 5,
       n_inner_folds = 10,
       cv_times = 10,
@@ -129,7 +131,9 @@ pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colnam
       feature_importance_method = "permutation",
       jobs = 1,
       threads = 1,
-      seed = seed))
+      seed = seed)
+    counter <<- counter + 1
+  })
   return(out)
 }
 
