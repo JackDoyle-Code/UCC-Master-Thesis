@@ -11,6 +11,10 @@ preprocess_samples <- function(
   # imputes zeros if the impute_method is not NA
   if (!is.na(scale_method[[2]])){
     dataset <- impute_zeros(dataset, scale_method)
+    if (any(dataset <0)) {
+      message("Negative values found, turning to positive")
+      dataset <- abs(dataset)
+    }
   }
 
   # performs centred log ratio transformation if selected

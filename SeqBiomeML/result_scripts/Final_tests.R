@@ -104,7 +104,7 @@ pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colnam
   counter <- 1
   out <- apply(cb_grid, 1, function(x) {
     print(paste("Model:", counter))
-    run_ml_nestedcv(
+    model = run_ml_nestedcv(
       dataset = dataset,
       metadata = metadata,
       method = x$method,
@@ -133,6 +133,7 @@ pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colnam
       threads = 1,
       seed = seed)
     counter <<- counter + 1
+    return(model)
   })
   return(out)
 }
