@@ -144,7 +144,7 @@ index_factor <- function(x, convert_bin = FALSE) {
 #' Function-7
 #' @noRd
 #' feature selection using LASSO
-glm_filter <- function(y, x, n = 100, cv_method = list(method = "repeatedcv", times = 10 , repeats = 10), outcome_type = "binary") {
+glm_filter <- function(y, x, n = 20, cv_method = list(method = "repeatedcv", times = 10 , repeats = 10), outcome_type = "binary") {
   # cv_method uses repeatedcv because it reduces the variance and bias the most, 10 times and repeats are used as that is what is recommended by literature
   family = switch(outcome_type,
                    "continuous" = "gaussian",
@@ -175,7 +175,7 @@ glm_filter <- function(y, x, n = 100, cv_method = list(method = "repeatedcv", ti
 #' Function-8
 #' @noRd
 #' feature selection using Boruta
-boruta_filter <- function(y, x, n = 100, maxRuns = 100) { # getImp can be normalised permutation, raw permutation or gini impurity.
+boruta_filter <- function(y, x, n = 20, maxRuns = 100) { # getImp can be normalised permutation, raw permutation or gini impurity.
 # Higher value for MaxRuns will likely reduce tentative features, but 100, 300, 500 still return the same top 100 features
   stats = Boruta(x, as.factor(y), maxRuns = maxRuns)
   if (!is.null(n)) {
@@ -216,7 +216,7 @@ rfe_filter <- function(y, x, cv_method = list(method = "repeatedcv", times = 10 
 #' Function-10
 #' @noRd
 #' feature selection using mRMR
-mrmr_filter <- function(y, x, n = 100) {
+mrmr_filter <- function(y, x, n = 20) {
   fact = as.numeric(as.factor(y)) - 1
   data = mRMR.data(cbind(x, fact))
   mrmr = mRMR.classic(data = data, target_indices = (ncol(x) + 1), feature_count = n)
