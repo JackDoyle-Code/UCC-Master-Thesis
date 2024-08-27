@@ -158,7 +158,10 @@ plot3 <- ggplot(count_sig_colour, aes(x = Var1, y = Freq, fill = Percentage_Cove
 
 # returns the parameters of the best models (by AUC and by most significant features)
 best_auc = new_comb[ord_mod$models, ]
+best_auc = cbind(best_auc, model_res[rownames(best_auc), ]$AUC)
 most_sig = new_comb[ord_sig_mod, ]
+most_sig = cbind(best_auc, model_res[rownames(best_auc), ]$AUC)
+
 
 
 
