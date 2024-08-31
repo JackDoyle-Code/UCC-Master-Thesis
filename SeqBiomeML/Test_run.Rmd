@@ -310,14 +310,14 @@ return(perf_met)
 
 
 ```{r}
-s_results <- load("../Data/16S_rsv/r_results.RData")
+r_results <- load("../Data/16S_rsv/r_results_unique.RData")
 
 library(magick)
 plot1 = image_read("../Data/16S_rsv/r_plot1.png")
-plot2 = image_read("../Data/r_plot2.png")
-plot3 = image_read("../Data/r_plot3.png")
-plot4 = image_read("../Data/r_plot3_unique.png")
-plot5 = image_read("../Data/r_plot2_unique.png")
+plot2 = image_read("../Data/16S_rsv/r_plot2_unique.png")
+plot3 = image_read("../Data/16S_rsv/r_plot3_unique.png")
+plot4 = image_read("../Data/16S_rsv/r_plot4.png")
+plot5 = image_read("../Data/16S_rsv/r_plot5.png")
 
 s_results <- load("../Data/16S_species/s_results.RData")
 
@@ -338,5 +338,19 @@ head(count_sig, 10)
 ```
 
 ```{r}
+# for tss plots instead of count
+S_rsv = data.frame(t(apply(S_rsv, 1, function(x) x/sum(x))))
+best_sig = sapply(best_sig, function (x) gsub("\\[|\\]", ".", x))
+
+S_rsv[, best_sig[4]]
+S_rsv[, "Seq_0000038..Bacteroides.ovatus"]
+?gsub
+```
+
+```{r}
+# for meta_species data
+new_comb = new_comb[1:288, ]
+new_comb = new_comb[!(new_comb$impute_method == "CZM") | is.na(new_comb$impute_method), ] 
+new_comb = new_comb[!(new_comb$scale_method == "tss"), ]
 ```
 
