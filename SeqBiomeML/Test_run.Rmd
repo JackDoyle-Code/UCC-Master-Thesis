@@ -310,11 +310,11 @@ return(perf_met)
 
 
 ```{r}
-r_results <- load("../Data/16S_rsv/r_results_unique.RData")
+r_results <- load("../Data/16S_rsv/r_results.RData")
 
 library(magick)
-plot1 = image_read("../Data/16S_rsv/r_plot1.png")
-plot2 = image_read("../Data/16S_rsv/r_plot2_unique.png")
+r_plot1 = image_read("../Data/16S_rsv/r_plot1.png")
+r_plot2 = image_read("../Data/16S_rsv/r_plot2_unique.png")
 plot3 = image_read("../Data/16S_rsv/r_plot3_unique.png")
 plot4 = image_read("../Data/16S_rsv/r_plot4.png")
 plot5 = image_read("../Data/16S_rsv/r_plot5.png")
@@ -322,8 +322,8 @@ plot5 = image_read("../Data/16S_rsv/r_plot5.png")
 s_results <- load("../Data/16S_species/s_results.RData")
 
 library(magick)
-plot1 = image_read("../Data/16S_species/s_plot1.png")
-plot2 = image_read("../Data/16S_species/s_plot2.png")
+s_plot1 = image_read("../Data/16S_species/s_plot1.png")
+s_plot2 = image_read("../Data/16S_species/s_plot2.png")
 plot3 = image_read("../Data/16S_species/s_plot3.png")
 plot4 = image_read("../Data/16S_species/s_plot4.png")
 plot5 = image_read("../Data/16S_species/s_plot5.png")
@@ -352,5 +352,120 @@ S_rsv[, "Seq_0000038..Bacteroides.ovatus"]
 new_comb = new_comb[1:288, ]
 new_comb = new_comb[!(new_comb$impute_method == "CZM") | is.na(new_comb$impute_method), ] 
 new_comb = new_comb[!(new_comb$scale_method == "tss"), ]
+```
+
+```{r}
+# for comparing performance for models
+rf_data = 
+glm_data =
+svm_data =
+knn_data = 
+
+summary(rf_data)
+  
+comp_auc = data.frame(
+  Model = rep(c('Random Forest', 'GLM', 'SVM', "KNN"), 
+          times = c(length(rf_data), length(glm_data), length(svm_data), length(knn_data))),
+  AUC = c(rf_data, glm_data, svm_data, knn_data)
+)
+shapiro.test(comp_auc)
+
+
+# for normally distributed data
+aov_result = aov(AUC ~ Model, data = comp_auc)
+summary(aov_result)
+TukeyHSD(aov_result)
+# for non-parametric data
+library(FSA)
+kruskal.test(AUC ~ Model, data = comp_auc)
+dunnTest(AUC ~ Model, data = comp_auc, method = "bonferroni")
+
+
+library(viridis)
+ggplot(comp_auc, aes(x = Model, y = AUC, fill = Model)) +
+  geom_boxplot(outlier.shape = NA, width = 0.4, lwd = 0.5) +  
+  geom_jitter(color = 'black', width = 0.2, alpha = 0.5) +
+  scale_fill_viridis(discrete = TRUE, option = "Q") + 
+  labs(x = 'Model', y = 'AUC Value', title = 'Comparison of AUC for Different Models') +
+  theme_minimal() +
+  theme(legend.position = 'top')
+
+ggplot(comp_auc, aes(x = Model, y = AUC, fill = Model)) +
+  geom_boxplot(outlier.shape = 16, outlier.size = 3, width = 0.6, lwd = 0.5) +  
+  scale_fill_viridis(discrete = TRUE, option = "C") +  
+  labs(x = 'Model', y = 'AUC Value', title = 'Comparison of AUC for Different Models') +
+  theme_minimal() +
+  theme(legend.position = 'top')
+```
+
+
+```{r}
+# formatting into one grid 
+library(gridExtra)
+library(grid)
+library(ggplot2)
+
+# grid plot
+r_grid_img1 <- rasterGrob(r_plot1, interpolate=TRUE)
+s_grid_img1 <- rasterGrob(g_plot1, interpolate=TRUE)
+g_grid_img1 <- rasterGrob(s_plot1, interpolate=TRUE)
+ms_grid_img1 <- rasterGrob(ms_plot1, interpolate=TRUE)
+grid <- grid.arrange(r_grid_img1, s_grid_img1, g_grid_img1, ms_grid_img1, nrow=4)
+ggsave("plot1_grid.png", plot = grid, width = 10, height = 10)
+
+
+# grid table for top 5 most frequent features
+r_freq_5 = rbind(freq_out[[2]], freq_out[[3]][1:4, ])
+s_freq_5 = rbind(freq_out[[2]], freq_out[[3]][1:4, ])
+g_freq_5 = rbind(freq_out[[2]], freq_out[[3]][1:4, ])
+ms_freq_5 = rbind(freq_out[[2]], freq_out[[3]][1:4, ])
+
+grid_table1 = rbind(r_freq_5, s_freq_5, g_freq_5, ms_freq_5)
+
+
+# grid table for top 5 most significant features (by most frequent significant features)
+r_sig_5 = count_sig_colour[1:5, ]
+s_sig_5 = count_sig_colour[1:5, ]
+g_sig_5 = count_sig_colour[1:5, ]
+ms_sig_5 = count_sig_colour[1:5, ]
+
+save(freq_out, sig_features, sig_data_colour, count_sig_colour, best_auc, best_sig, group_best, s_freq_5, s_sig_5, file = "s_resultst.RData")
+
+# comparison of relative abundance between groups
+S_species = data.frame(t(apply(S_species, 1, function(x) x/sum(x))))
+sig_12 = as.character(head(count_sig_colour, 12)$Var1)
+sig_12 = sapply(sig_12, function (x) gsub("-", ".", x))
+best_species = S_species[, sig_12]
+# adds a group column (Control/Athlete)
+group_best = cbind(best_species, Group = S_meta$ParticipantType)
+group_best[group_best$Group != "control", 13] = "athlete"
+
+ra_res_ttest = apply(group_best[, 1:12], 2, function(x) t.test(x ~ group_best$Group)$p.value)
+
+save(freq_out, sig_features, sig_data_colour, count_sig_colour, best_auc, best_sig, group_best, s_freq_5, s_sig_5, s_ra_res, file = "s_resultst.RData")
+```
+
+```{r}
+# TO DO LIST
+# 1. Run metagenomic species level and 16S genus level models
+# 2. cbind the AUC values to best_auc and best_sig for each taxonomic level
+# 3. Plot the boxplot of comparison of different models (include in the plot all models e.g. glm, knn, mrmr, etc). With this get the summary statistics for each model type data and extract the max, min, median. The average is across all datasets
+# 4. Do an ANOVA between the different types of models for each taxonomic level 
+# 5. Perform a ttest comparing the means of the two groups for the top 12 features for all taxonomic levels
+# 6. create a grid of tables that combine all taxonomic levels for each table type
+# 7. create plot grids that combine all taxonomic levels for all plots
+# 8. say what set.seed you used in the methods
+```
+
+```{r}
+# gets summary statistics for the parameters of the predictive model
+scl_param = c("clr", "tss", "rclr")
+flt_param = c("mrmr_filter", "glm_filter", "boruta_filter")
+mdl_param = c("rf", "glmnet", "kknn", "svmRadial")
+scl_list = set_names(lapply(scl_param, function(x) best_auc[best_auc$scale_method == x, ]$AUC), scl_param)
+flt_list = set_names(lapply(flt_param, function(x) best_auc[best_auc$fs_method == x, ]$AUC), flt_param)
+mdl_list = set_names(lapply(mdl_param, function(x) best_auc[best_auc$method == x, ]$AUC), mdl_param)
+AUC_list = c(scl_list, flt_list, mdl_list)
+sum_list = lapply(AUC_list, summary)
 ```
 

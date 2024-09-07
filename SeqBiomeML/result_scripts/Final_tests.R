@@ -141,9 +141,9 @@ pipeline_iteration_nested <- function(cb_grid, dataset, metadata, outcome_colnam
 
 # Calling the functions
 new_comb <- apply_conditions(combinations)
-comp_data <- S_rsv[rownames(S_rsv) %in% S_meta$SampleID, ]
-S_rsv1_288_run <- pipeline_iteration_nested(new_comb[1:288, ], dataset = comp_data, metadata = S_meta, outcome_colname = "ParticipantType", group_colname = "SubjectID", seed = 0)
-S_rsv1_288_res = do.call(rbind, lapply(S_rsv1_288_run, function(x) {
+comp_data <- S_genus[rownames(S_genus) %in% S_meta$SampleID, ]
+S_genus1_288_run <- pipeline_iteration_nested(new_comb[1:288, ], dataset = comp_data, metadata = S_meta, outcome_colname = "ParticipantType", group_colname = "SubjectID", seed = 0)
+S_genus1_288_res = do.call(rbind, lapply(S_genus1_288_run, function(x) {
   perf = x[[1]][[6]]
   perf_row = perf[2, 3:16]
   clean_perf = round(perf_row, 3)
@@ -151,12 +151,14 @@ S_rsv1_288_res = do.call(rbind, lapply(S_rsv1_288_run, function(x) {
 }))
 
 # saves the models and their performance results
-save(S_rsv1_288_res, S_rsv1_288_run, file = "s_rsv1_288.RData")
+save(S_genus1_288_res, S_genus1_288_run, file = "s_genus1_288.RData")
 
-
-comp_data <- Meta_EC[rownames(Meta_EC) %in% Meta_meta$SampleID, ]
-Meta_EC1_288_run <- pipeline_iteration_nested(new_comb[1:288, ], dataset = comp_data, metadata = S_meta, outcome_colname = "Group", group_colname = "SubjectID", seed = 0)
-Meta_EC1_288_res = do.call(rbind, lapply(Meta_EC1_288_run, function(x) {
+new_comb = new_comb[1:288, ]
+new_comb = new_comb[!(new_comb$scale_method == "tss"), ]
+new_comb = new_comb[!(new_comb$impute_method == "CZM") | is.na(new_comb$impute_method), ]
+comp_data <- Meta_species[rownames(Meta_species) %in% Meta_meta$SampleID, ]
+Meta_species1_288_run <- pipeline_iteration_nested(new_comb, dataset = comp_data, metadata = S_meta, outcome_colname = "Group", group_colname = "SubjectID", seed = 0)
+Meta_species1_288_res = do.call(rbind, lapply(Meta_species1_288_run, function(x) {
   perf = x[[1]][[6]]
   perf_row = perf[2, 3:16]
   clean_perf = round(perf_row, 3)
@@ -164,4 +166,4 @@ Meta_EC1_288_res = do.call(rbind, lapply(Meta_EC1_288_run, function(x) {
 }))
 
 # saves the models and their performance results
-save(Meta_EC1_288_res, Meta_EC1_288_run, file = "Meta_EC1_288.RData")
+save(Meta_species1_288_res, Meta_species1_288_run, file = "Meta_EC1_288.RData")

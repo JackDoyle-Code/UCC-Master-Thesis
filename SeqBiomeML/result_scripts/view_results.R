@@ -29,6 +29,7 @@ get_feature_frequency <- function(freq_tbl, N) {
   return(list("100%" = across_100, "95%-99%" = across_95, "75-95%" = across_75, "50-75%" = across_50, "25-50%" = across_25, "<25%" = across_0))
 }
 freq_out <- get_feature_frequency(feat_freq, nrow(model_res))
+g_freq_5 <- rbind(freq_out[[2]], freq_out[[3]][1:4, ])  ############### CHECK HERE, DO NOT AUTO RUN ####################
 
 # returns the names of each group and the number of features in the group
 group_freq <- data.frame(Object = names(freq_out), Count = sapply(freq_out, nrow))
@@ -138,6 +139,7 @@ count_sig <- as.data.frame(sort(table(sig_features$feat), decreasing = T))
 count_sig <- count_sig[count_sig$Freq != 0, ]
 count_sig_colour <- cbind(count_sig, Percentage_Cover = get_colour(count_sig, 288))
 count_sig_colour$Percentage_Cover <- factor(count_sig_colour$Percentage_Cover, levels = c("<5%","5-15%", "15-25%", "25-40%", "40-55%"))
+g_sig_5 <- count_sig_colour[1:5, ]
 
 # plots the significant features and how frequently they were significant across all models
 plot3 <- ggplot(count_sig_colour, aes(x = Var1, y = Freq, fill = Percentage_Cover)) +
@@ -162,6 +164,15 @@ best_auc = cbind(best_auc, model_res[rownames(best_auc), ]$AUC)
 most_sig = new_comb[ord_sig_mod, ]
 most_sig = cbind(best_auc, model_res[rownames(best_auc), ]$AUC)
 
+scl_param = c("clr", "tss", "rclr")
+flt_param = c("mrmr_filter", "glm_filter", "boruta_filter")
+mdl_param = c("rf", "glmnet", "kknn", "svmRadial")
+scl_list = set_names(lapply(scl_param, function(x) best_auc[best_auc$scale_method == x, ]$AUC), scl_param)
+flt_list = set_names(lapply(flt_param, function(x) best_auc[best_auc$fs_method == x, ]$AUC), flt_param)
+mdl_list = set_names(lapply(mdl_param, function(x) best_auc[best_auc$method == x, ]$AUC), mdl_param)
+AUC_list = c(scl_list, flt_list, mdl_list)
+sum_list = lapply(AUC_list, summary)
+
 
 
 
@@ -173,11 +184,17 @@ library(reshape2)
 
 # gets the x most significant features and their count data
 best_sig = as.character(head(count_sig_colour, 12)$Var1)
-best_species = S_genus[, best_sig]
+S_genus = data.frame(t(apply(S_genus, 1, function(x) x/sum(x))))
+best_sig = sapply(best_sig, function (x) gsub(" ", ".", x)) ########## comment out these 3 lines for meta ###########
+best_sig = sapply(best_sig, function (x) gsub("-", ".", x))
+best_genus = S_genus[, best_sig]
 
 # adds a group column (Control/Athlete)
 group_best = cbind(best_species, Group = S_meta$ParticipantType)
-group_best[group_best$Group != "control", 13] = "Athlete"
+group_best[group_best$Group != "control", 13] = "athlete"
+
+# performs a ttest between control and athlete for each of te 12 significant features
+g_ra_res = apply(group_best[, 1:12], 2, function(x) t.test(x ~ group_best$Group)$p.value)
 
 # joins all colnames into one column with their corresponding count data as another column
 melt_best <- melt(group_best, id.vars = 'Group')
@@ -215,7 +232,7 @@ exc_out_plot = ggplot(exc_out,
   facet_wrap(~variable, scales = "free_y")
 
 # save lists/tables/plots                     ###### Change the save locations ######
-save(freq_out, sig_features, sig_data_colour, count_sig_colour, best_auc, best_sig, group_best, file = "g_results.RData")
+save(freq_out, sig_features, sig_data, count_sig, best_auc, best_sig, group_best, g_freq_5, g_sig_5, sum_list, file = "g_results.RData")
 
 ggsave("g_plot1.png", plot = plot1, width = 10, height = 7, units = "in")
 ggsave("g_plot2.png", plot = plot2, width = 10, height = 7, units = "in")
