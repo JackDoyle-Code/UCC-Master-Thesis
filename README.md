@@ -1,4 +1,4 @@
-# SeqBiomeML
+# UCC Master Thesis
 This is a machine learning pipeline for the classification/multiclassification/regression of microbiome data. 
 
 It consists of two main functions run_ml_cv and run_ml_nestedcv that requires a dataset (e.g. OTU table from NGS) and metadata (e.g. count abundance). 
