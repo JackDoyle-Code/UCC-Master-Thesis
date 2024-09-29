@@ -114,7 +114,7 @@ get_colour <- function(freq_tbl, N) {
     }
   })
 }
-sig_data_colour <- cbind(sig_data, get_colour(sig_data, 288))
+sig_data_colour <- cbind(sig_data, get_colour(sig_data, nrow(model_res)))
 colnames(sig_data_colour)[[3]] = "Percentage_Cover"
 
 # plots the significant features and they're occurrence across all models
@@ -157,6 +157,17 @@ plot3 <- ggplot(count_sig_colour, aes(x = Var1, y = Freq, fill = Percentage_Cove
   ) +
   scale_fill_viridis_d(option = "D", direction = 1) +
   scale_y_continuous(limits = c(0, 288), expand = expansion(mult = c(0, 0)))  # Control y-axis breaks
+
+
+
+
+
+
+
+
+
+
+
 
 # returns the parameters of the best models (by AUC and by most significant features)
 best_auc = new_comb[ord_mod$models, ]

@@ -61,29 +61,6 @@ lapply(out[[1]], function(x) x[[7]]) # to look at plots
 
 
 ```{r}
-# for feature selection fiter_end
-y = true_meta$ParticipantType
-x = test1$filt_data
-
-ttest_filter(y, x)
-
-out = order(pval)
-outp = sort(pval)
-order(test1$pvalue)[sort(test1$pvalue) < 0.05]
-```
-
-
-```{r}
-hyper = get_hyperparams_list(test1[[1]], "svmRadial")
-
-test2 = nullModel(y = factor(y))
-test3 = predict(test2, test_data)
-multiClassSummary(data.frame(obs = factor(test_metadata$ParticipantType, levels = uniq_obs), pred = factor(test3, levels = uniq_obs)), lev = uniq_obs)
-sum(test_metadata$ParticipantType == "control")/40
-```
-
-
-```{r}
 con_ath = true_meta
 con_ath[con_ath$ParticipantType != "control", 2] = "Athlete"
 comp_data <- rsv[rownames(rsv) %in% con_ath$SampleID, ]
@@ -197,11 +174,6 @@ library(reticulate) # allows the use of python in R, it does work
 
 
 ```{r}
-
-```
-
-
-```{r}
 groups = S_meta[["SubjectID"]]
 outcome_colname = "ParticipantType"
 dataset <- preprocess_samples(dataset = comp_data, scale_method = list("clr", "pseudo", 1))
@@ -310,7 +282,8 @@ return(perf_met)
 
 
 ```{r}
-r_results <- load("../Data/16S_rsv/r_results.RData")
+# for viewing saved ggplots
+r_results <- load("../Data/16S_rsv/r_resultst.RData")
 
 library(magick)
 r_plot1 = image_read("../Data/16S_rsv/r_plot1.png")
@@ -318,84 +291,101 @@ r_plot2 = image_read("../Data/16S_rsv/r_plot2_unique.png")
 plot3 = image_read("../Data/16S_rsv/r_plot3_unique.png")
 plot4 = image_read("../Data/16S_rsv/r_plot4.png")
 plot5 = image_read("../Data/16S_rsv/r_plot5.png")
-
-s_results <- load("../Data/16S_species/s_results.RData")
-
-library(magick)
-s_plot1 = image_read("../Data/16S_species/s_plot1.png")
-s_plot2 = image_read("../Data/16S_species/s_plot2.png")
-plot3 = image_read("../Data/16S_species/s_plot3.png")
-plot4 = image_read("../Data/16S_species/s_plot4.png")
-plot5 = image_read("../Data/16S_species/s_plot5.png")
-
-plot1
-plot2
-plot3
-plot4
-plot5
-
-head(count_sig, 10)
 ```
 
-```{r}
-# for tss plots instead of count
-S_rsv = data.frame(t(apply(S_rsv, 1, function(x) x/sum(x))))
-best_sig = sapply(best_sig, function (x) gsub("\\[|\\]", ".", x))
-
-S_rsv[, best_sig[4]]
-S_rsv[, "Seq_0000038..Bacteroides.ovatus"]
-?gsub
-```
-
-```{r}
-# for meta_species data
-new_comb = new_comb[1:288, ]
-new_comb = new_comb[!(new_comb$impute_method == "CZM") | is.na(new_comb$impute_method), ] 
-new_comb = new_comb[!(new_comb$scale_method == "tss"), ]
-```
 
 ```{r}
 # for comparing performance for models
-rf_data = 
-glm_data =
-svm_data =
-knn_data = 
+# gets summary statistics for the parameters of the predictive model
+sum_list = lapply(AUC_list, summary)
+r_sum_data = as.data.frame(do.call(rbind, sum_list))
+s_sum_data = as.data.frame(do.call(rbind, sum_list))
+g_sum_data = as.data.frame(do.call(rbind, sum_list))
+ms_sum_data = as.data.frame(do.call(rbind, sum_list))
 
-summary(rf_data)
-  
-comp_auc = data.frame(
-  Model = rep(c('Random Forest', 'GLM', 'SVM', "KNN"), 
-          times = c(length(rf_data), length(glm_data), length(svm_data), length(knn_data))),
-  AUC = c(rf_data, glm_data, svm_data, knn_data)
-)
-shapiro.test(comp_auc)
+# gets the data ready for kruskal test
+scl_data = data.frame(scale_method = rep(names(scl_list), times = sapply(scl_list, length)), AUC = unlist(scl_list))
+flt_data = data.frame(fs_method = rep(names(flt_list), times = sapply(flt_list, length)), AUC = unlist(flt_list))
+mdl_data = data.frame(model = rep(names(mdl_list), times = sapply(mdl_list, length)), AUC = unlist(mdl_list))
 
+r_param_data = list(scl_data, flt_data, mdl_data)
+s_param_data = list(scl_data, flt_data, mdl_data)
+g_param_data = list(scl_data, flt_data, mdl_data)
+ms_param_data = list(scl_data, flt_data, mdl_data)
+
+save(r_sum_data, r_param_data,  file = "r_predictive_model_results.RData")
+
+############ Run the rest once all the individual results are gathered ###############
+
+# gets the mean summary statistics across all datsets
+full_sum_data = rbind(s_sum_data, g_sum_data, r_sum_data, ms_sum_data)
+full_sum_data$Group = c(rownames(s_sum_data), rownames(g_sum_data), rownames(r_sum_data), rownames(ms_sum_data))
+mean_sum_data = lapply(split(full_sum_data, full_sum_data$Group), function(x) colMeans(x[, 1:6]))
+mean_sum_data = as.data.frame(do.call(rbind, mean_sum_data))
+mean_var_auc = mean(apply(mean_sum_data, 1, function(x) x[6] - x[1]))
+
+# gets the p-value and difference between the models across all datasets
+rscl_data = do.call(cbind, r_param_data[[1]])
+sscl_data = do.call(cbind, s_param_data[[1]])
+gscl_data = do.call(cbind, g_param_data[[1]])
+msscl_data = do.call(cbind, ms_param_data[[1]])
+scl_data = as.data.frame(rbind(rscl_data, sscl_data, gscl_data, msscl_data))
+scl_data$AUC = as.numeric(scl_data$AUC)
+
+rflt_data = do.call(cbind, r_param_data[[2]])
+sflt_data = do.call(cbind, s_param_data[[2]])
+gflt_data = do.call(cbind, g_param_data[[2]])
+msflt_data = do.call(cbind, ms_param_data[[2]])
+flt_data = as.data.frame(rbind(rflt_data, sflt_data, gflt_data, msflt_data))
+flt_data$AUC = as.numeric(flt_data$AUC)
+
+rmdl_data = do.call(cbind, r_param_data[[3]])
+smdl_data = do.call(cbind, s_param_data[[3]])
+gmdl_data = do.call(cbind, g_param_data[[3]])
+msmdl_data = do.call(cbind, ms_param_data[[3]])
+mdl_data = as.data.frame(rbind(rmdl_data, smdl_data, gmdl_data, msmdl_data))
+mdl_data$AUC = as.numeric(mdl_data$AUC)
 
 # for normally distributed data
-aov_result = aov(AUC ~ Model, data = comp_auc)
-summary(aov_result)
-TukeyHSD(aov_result)
+#aov_result = aov(AUC ~ model, data = mdl_data)
+#summary(aov_result)
+#TukeyHSD(aov_result)
 # for non-parametric data
 library(FSA)
-kruskal.test(AUC ~ Model, data = comp_auc)
-dunnTest(AUC ~ Model, data = comp_auc, method = "bonferroni")
+ktest = kruskal.test(AUC ~ scale_method, data = scl_data)
+dtest = dunnTest(AUC ~ scale_method, data = scl_data, method = "bonferroni")
+scl_comp = list(krsukal = ktest, dunn = dtest)
+ktest = kruskal.test(AUC ~ fs_method, data = flt_data)
+dtest = dunnTest(AUC ~ fs_method, data = flt_data, method = "bonferroni")
+flt_comp = list(krsukal = ktest, dunn = dtest)
+ktest = kruskal.test(AUC ~ model, data = mdl_data)
+dtest = dunnTest(AUC ~ model, data = mdl_data, method = "bonferroni")
+mdl_comp = list(krsukal = ktest, dunn = dtest)
 
+colnames(scl_data)[1] = "method"
+colnames(flt_data)[1] = "method"
+colnames(mdl_data)[1] = "method"
+method_data = rbind(scl_data, flt_data, mdl_data)
+method_data$SubGroup = apply(method_data, 1, function(x) case_when(
+  x[["method"]] %in% c("clr", "tss", "rclr") ~ "Scale Method",
+  x[["method"]] %in% c("mrmr_filter", "glm_filter", "boruta_filter") ~ "Feature Selection",
+  x[["method"]] %in% c("rf", "glmnet", "kknn", "svmRadial") ~ "Model Approach"
+))
+method_data$method <- factor(method_data$method, levels = c("clr", "tss", "rclr", "mrmr_filter", "glm_filter", "boruta_filter", "rf", "glmnet", "kknn", "svmRadial"))
 
-library(viridis)
-ggplot(comp_auc, aes(x = Model, y = AUC, fill = Model)) +
-  geom_boxplot(outlier.shape = NA, width = 0.4, lwd = 0.5) +  
-  geom_jitter(color = 'black', width = 0.2, alpha = 0.5) +
-  scale_fill_viridis(discrete = TRUE, option = "Q") + 
+method_plot <- ggplot(method_data, aes(x = method, y = AUC, fill = SubGroup)) +
+  geom_boxplot(outlier.shape = NA, width = 0.4, lwd = 0.8, position = position_dodge(width = 0.75)) +  
+  geom_jitter(color = "black", alpha = 0.1, position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.75)) +
+  scale_fill_viridis(discrete = TRUE, option = "Q", begin = 0.4, end = 1) + 
   labs(x = 'Model', y = 'AUC Value', title = 'Comparison of AUC for Different Models') +
   theme_minimal() +
   theme(legend.position = 'top')
 
-ggplot(comp_auc, aes(x = Model, y = AUC, fill = Model)) +
-  geom_boxplot(outlier.shape = 16, outlier.size = 3, width = 0.6, lwd = 0.5) +  
-  scale_fill_viridis(discrete = TRUE, option = "C") +  
-  labs(x = 'Model', y = 'AUC Value', title = 'Comparison of AUC for Different Models') +
-  theme_minimal() +
-  theme(legend.position = 'top')
+
+dunn = rbind(scl_comp[[2]]$res, flt_comp[[2]]$res, mdl_comp[[2]]$res)
+krus = rbind(Scale_Method = scl_comp[[1]]$p.value, Feature_Selection = flt_comp[[1]]$p.value, Model_Approach = mdl_comp[[1]]$p.value)
+save(dunn, krus, mean_sum_data, mean_var_auc, file = "predictive_model_res.RData")
+ggsave("predictive_model_plot.png", plot = method_plot, width = 12, height = 7, units = "in")
 ```
 
 
@@ -435,37 +425,47 @@ save(freq_out, sig_features, sig_data_colour, count_sig_colour, best_auc, best_s
 S_species = data.frame(t(apply(S_species, 1, function(x) x/sum(x))))
 sig_12 = as.character(head(count_sig_colour, 12)$Var1)
 sig_12 = sapply(sig_12, function (x) gsub("-", ".", x))
+sig_12 = sapply(sig_12, function (x) gsub(" ", ".", x))
 best_species = S_species[, sig_12]
 # adds a group column (Control/Athlete)
 group_best = cbind(best_species, Group = S_meta$ParticipantType)
 group_best[group_best$Group != "control", 13] = "athlete"
 
-ra_res_ttest = apply(group_best[, 1:12], 2, function(x) t.test(x ~ group_best$Group)$p.value)
+s_ra_res = apply(group_best[, 1:12], 2, function(x) t.test(x ~ group_best$Group)$p.value)
 
 save(freq_out, sig_features, sig_data_colour, count_sig_colour, best_auc, best_sig, group_best, s_freq_5, s_sig_5, s_ra_res, file = "s_resultst.RData")
+
+
+# comparison of relative abundance between groups
+S_rsv = data.frame(t(apply(S_rsv, 1, function(x) x/sum(x))))
+sig_12 = as.character(head(count_sig_colour, 12)$Var1)
+sig_12 = sapply(sig_12, function (x) gsub("-", ".", x))
+sig_12 = sapply(sig_12, function (x) gsub(" ", ".", x))
+sig_12 = sapply(sig_12, function (x) gsub("#", ".", x))
+sig_12 = sapply(sig_12, function (x) gsub("\\[|\\]", ".", x))
+best_species = S_rsv[, sig_12]
+# adds a group column (Control/Athlete)
+group_best = cbind(best_species, Group = S_meta$ParticipantType)
+group_best[group_best$Group != "control", 13] = "athlete"
+
+r_ra_res = apply(group_best[, 1:12], 2, function(x) t.test(x ~ group_best$Group)$p.value)
+
+save(freq_out, sig_features, sig_data_colour, count_sig_colour, best_auc, best_sig, group_best, r_freq_5, r_sig_5, r_ra_res, file = "r_resultst.RData")
 ```
 
-```{r}
-# TO DO LIST
-# 1. Run metagenomic species level and 16S genus level models
-# 2. cbind the AUC values to best_auc and best_sig for each taxonomic level
-# 3. Plot the boxplot of comparison of different models (include in the plot all models e.g. glm, knn, mrmr, etc). With this get the summary statistics for each model type data and extract the max, min, median. The average is across all datasets
-# 4. Do an ANOVA between the different types of models for each taxonomic level 
-# 5. Perform a ttest comparing the means of the two groups for the top 12 features for all taxonomic levels
-# 6. create a grid of tables that combine all taxonomic levels for each table type
-# 7. create plot grids that combine all taxonomic levels for all plots
-# 8. say what set.seed you used in the methods
-```
 
 ```{r}
-# gets summary statistics for the parameters of the predictive model
-scl_param = c("clr", "tss", "rclr")
-flt_param = c("mrmr_filter", "glm_filter", "boruta_filter")
-mdl_param = c("rf", "glmnet", "kknn", "svmRadial")
-scl_list = set_names(lapply(scl_param, function(x) best_auc[best_auc$scale_method == x, ]$AUC), scl_param)
-flt_list = set_names(lapply(flt_param, function(x) best_auc[best_auc$fs_method == x, ]$AUC), flt_param)
-mdl_list = set_names(lapply(mdl_param, function(x) best_auc[best_auc$method == x, ]$AUC), mdl_param)
-AUC_list = c(scl_list, flt_list, mdl_list)
-sum_list = lapply(AUC_list, summary)
+library(dplyr)
+grid_tbl1 = rbind(r_freq_5, s_freq_5, g_freq_5)
+grid_tbl2 = rbind(r_sig_5, s_sig_5, g_sig_5)
+# binding features and p-values
+r_feat_p = rbind(names(r_ra_res), formatC(r_ra_res, format = "e", digits = 2))
+s_feat_p = rbind(names(s_ra_res), formatC(s_ra_res, format = "e", digits = 2))
+g_feat_p = rbind(names(g_ra_res), formatC(g_ra_res, format = "e", digits = 2))
+ms_feat_p = rbind(names(ms_ra_res), formatC(ms_ra_res, format = "e", digits = 2))
+grid_tbl3 = as.data.frame(rbind(r_feat_p, s_feat_p, g_feat_p))
+colnames(grid_tbl3) = paste0("Significant Feature ", seq(1:12))
+
+write.table(t(ms_feat_p), "clipboard", sep = "\t", row.names = FALSE, col.names = TRUE)
 ```
 
